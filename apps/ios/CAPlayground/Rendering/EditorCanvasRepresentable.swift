@@ -33,6 +33,9 @@ struct EditorCanvasRepresentable: UIViewRepresentable {
 
     func updateUIView(_ view: EditorCanvasView, context: Context) {
         context.coordinator.parent = self
+        // Device Preview owns the black phone-stage background. Returning to the normal editor
+        // must restore the checkerboard immediately rather than inheriting Preview's black stage.
+        view.backgroundColor = showPreview ? .black : UIColor(patternImage: Self.checkerboard())
         view.display(
             project,
             selectedID: selectedID,
@@ -47,6 +50,21 @@ struct EditorCanvasRepresentable: UIViewRepresentable {
             timelinePlaying: timelinePlaying
         )
         if let command { view.perform(command) }
+    }
+
+    private static func checkerboard() -> UIImage {
+        let size = CGSize(width: 20, height: 20)
+        return UIGraphicsImageRenderer(size: size).image { context in
+            UIColor { traits in
+                traits.userInterfaceStyle == .dark ? UIColor(caHex: "#0B1220")! : UIColor(caHex: "#F8FAFC")!
+            }.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            UIColor { traits in
+                traits.userInterfaceStyle == .dark ? UIColor(caHex: "#1F2937")! : UIColor(caHex: "#E5E7EB")!
+            }.setFill()
+            context.fill(CGRect(x: 10, y: 0, width: 10, height: 10))
+            context.fill(CGRect(x: 0, y: 10, width: 10, height: 10))
+        }
     }
 
     @MainActor
