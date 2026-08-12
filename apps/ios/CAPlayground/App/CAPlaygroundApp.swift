@@ -4,6 +4,7 @@ import SwiftUI
 struct CAPlaygroundApp: App {
     @State private var store = ProjectStore()
     @State private var auth = AuthStore()
+    @State private var drive = DriveStore()
     @AppStorage("appearance") private var appearance = "system"
 
     var body: some Scene {
@@ -12,6 +13,7 @@ struct CAPlaygroundApp: App {
             HomeView()
                 .environment(store)
                 .environment(auth)
+                .environment(drive)
                 .tint(CATheme.accent)
                 .preferredColorScheme(
                     appearance == "dark" ? .dark : appearance == "light" ? .light : nil
