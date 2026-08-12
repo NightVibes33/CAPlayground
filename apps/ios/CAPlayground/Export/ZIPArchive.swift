@@ -1,4 +1,5 @@
 import Foundation
+import Compression
 
 enum ZIPArchiveError: Error { case invalidArchive, stringEncoding }
 
@@ -8,6 +9,46 @@ struct ZIPEntry {
 }
 
 enum ZIPArchive {
+    static func extract(_ archive: Data) throws -> [ZIPEntry] {
+        guard let eocd = archive.lastRange(of: Data([0x50, 0x4b, 0x05, 0x06])), eocd.lowerBound + 22 <= archive.count else {
+            throw ZIPArchiveError.invalidArchive
+        }
+        let centralOffset = Int(archive.u32(at: eocd.lowerBound + 16))
+        let count = Int(archive.u16(at: eocd.lowerBound + 10))
+        var cursor = centralOffset
+        var entries: [ZIPEntry] = []
+        for _ in 0..<count {
+            guard cursor + 46 <= archive.count, archive.u32(at: cursor) == 0x02014b50 else { throw ZIPArchiveError.invalidArchive }
+            let method = archive.u16(at: cursor + 10)
+            let compressedSize = Int(archive.u32(at: cursor + 20))
+            let uncompressedSize = Int(archive.u32(at: cursor + 24))
+            let nameLength = Int(archive.u16(at: cursor + 28))
+            let extraLength = Int(archive.u16(at: cursor + 30))
+            let commentLength = Int(archive.u16(at: cursor + 32))
+            let localOffset = Int(archive.u32(at: cursor + 42))
+            guard cursor + 46 + nameLength <= archive.count,
+                  let path = String(data: archive[(cursor + 46)..<(cursor + 46 + nameLength)], encoding: .utf8),
+                  localOffset + 30 <= archive.count,
+                  archive.u32(at: localOffset) == 0x04034b50 else { throw ZIPArchiveError.invalidArchive }
+            let localNameLength = Int(archive.u16(at: localOffset + 26))
+            let localExtraLength = Int(archive.u16(at: localOffset + 28))
+            let dataOffset = localOffset + 30 + localNameLength + localExtraLength
+            guard dataOffset + compressedSize <= archive.count else { throw ZIPArchiveError.invalidArchive }
+            if !path.hasSuffix("/") {
+                let compressed = Data(archive[dataOffset..<(dataOffset + compressedSize)])
+                let data: Data
+                switch method {
+                case 0: data = compressed
+                case 8: data = try inflate(compressed, expectedSize: uncompressedSize)
+                default: throw ZIPArchiveError.invalidArchive
+                }
+                entries.append(.init(path: path, data: data))
+            }
+            cursor += 46 + nameLength + extraLength + commentLength
+        }
+        return entries
+    }
+
     static func create(entries: [ZIPEntry]) -> Data {
         var output = Data()
         var central = Data()
@@ -85,6 +126,23 @@ enum ZIPArchive {
         var crc: UInt32 = 0xffffffff
         for byte in data { crc ^= UInt32(byte); for _ in 0..<8 { crc = (crc >> 1) ^ (0xedb88320 & (0 &- (crc & 1))) } }
         return crc ^ 0xffffffff
+    }
+
+    private static func inflate(_ compressed: Data, expectedSize: Int) throws -> Data {
+        guard expectedSize >= 0 else { throw ZIPArchiveError.invalidArchive }
+        if expectedSize == 0 { return Data() }
+        var output = Data(count: expectedSize)
+        let decoded: Int = output.withUnsafeMutableBytes { (destination: UnsafeMutableRawBufferPointer) in
+            compressed.withUnsafeBytes { (source: UnsafeRawBufferPointer) in
+                compression_decode_buffer(
+                    destination.bindMemory(to: UInt8.self).baseAddress!, expectedSize,
+                    source.bindMemory(to: UInt8.self).baseAddress!, compressed.count,
+                    nil, COMPRESSION_ZLIB
+                )
+            }
+        }
+        guard decoded == expectedSize else { throw ZIPArchiveError.invalidArchive }
+        return output
     }
 }
 

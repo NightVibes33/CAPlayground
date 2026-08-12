@@ -3,6 +3,7 @@ import SwiftUI
 struct EditorCanvasRepresentable: UIViewRepresentable {
     @Binding var project: CAProjectDocument
     @Binding var selectedID: UUID?
+    var showBackground = true
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -14,7 +15,7 @@ struct EditorCanvasRepresentable: UIViewRepresentable {
 
     func updateUIView(_ view: EditorCanvasView, context: Context) {
         context.coordinator.parent = self
-        view.display(project, selectedID: selectedID)
+        view.display(project, selectedID: selectedID, showBackground: showBackground)
     }
 
     @MainActor
@@ -25,7 +26,18 @@ struct EditorCanvasRepresentable: UIViewRepresentable {
         func canvas(_ canvas: EditorCanvasView, selected id: UUID?) { parent.selectedID = id }
 
         func canvas(_ canvas: EditorCanvasView, moved id: UUID, to position: Vector2) {
-            parent.project.root.update(id: id) { $0.position = position }
+            parent.project.updateStateAware(targetID: id, values: ["position.x": position.x, "position.y": position.y]) { $0.position = position }
+        }
+
+        func canvas(_ canvas: EditorCanvasView, resized id: UUID, to size: LayerSize, position: Vector2) {
+            parent.project.updateStateAware(targetID: id, values: ["bounds.size.width": size.width, "bounds.size.height": size.height, "position.x": position.x, "position.y": position.y]) { layer in
+                layer.size = size
+                layer.position = position
+            }
+        }
+
+        func canvas(_ canvas: EditorCanvasView, rotated id: UUID, to degrees: Double) {
+            parent.project.updateStateAware(targetID: id, values: ["transform.rotation.z": degrees]) { $0.rotation = degrees }
         }
     }
 }

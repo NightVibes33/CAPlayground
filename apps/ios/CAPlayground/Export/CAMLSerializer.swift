@@ -40,13 +40,36 @@ enum CAMLSerializer {
         if model.rotation != 0 { transforms.append("rotate(\(number(model.rotation))deg)") }
         if !transforms.isEmpty { attributes.append(("transform", transforms.joined(separator: " "))) }
         if model.kind == .text { attributes += [("string", model.text), ("fontSize", model.fontSize.map(number)), ("foregroundColor", model.textColor.flatMap(color)), ("alignmentMode", model.textAlignment), ("wrapped", (model.wrapsText ?? true) ? "1" : "0")] }
-        if model.kind == .image { attributes += [("contents", model.imageName.map { "assets/\($0)" }), ("contentsGravity", gravity(model.contentMode))] }
+        if model.kind == .image { attributes += [("contentsGravity", gravity(model.contentMode))] }
+        if model.kind == .video {
+            let count = model.frameCount ?? 0
+            let fps = model.framesPerSecond ?? 30
+            attributes += [
+                ("caplayKind", "video"), ("caplayFrameCount", String(count)), ("caplayFPS", number(fps)),
+                ("caplayDuration", number(model.videoDuration ?? (Double(count) / max(fps, 1)))),
+                ("caplayAutoReverses", (model.autoReverses ?? false) ? "1" : "0"),
+                ("caplayFramePrefix", model.framePrefix), ("caplayFrameExtension", model.frameExtension ?? ".jpg"),
+                ("caplaySyncWWithState", (model.syncWithState ?? false) ? "1" : "0")
+            ]
+        }
         if model.kind == .replicator { attributes += [("instanceCount", String(model.instanceCount ?? 1)), ("instanceDelay", model.instanceDelay.map(number)), ("instanceTransform", instanceTransform(model)), ("instanceColor", "1 1 1"), ("preservesDepth", "1")] }
         if (model.kind == .transform || model.kind == .replicator), let perspective = model.perspective { attributes.append(("sublayerTransform", "perspective(\(number(perspective)))")) }
         if model.kind == .emitter { attributes += [("emitterPosition", model.emitterPosition.map { "\(number($0.x)) \(number($0.y))" }), ("emitterSize", model.emitterSize.map { "\(number($0.width)) \(number($0.height))" }), ("emitterShape", model.emitterShape), ("emitterMode", model.emitterMode), ("renderMode", model.renderMode)] }
         let pad = String(repeating: "  ", count: indent)
         let attrs = attributes.compactMap { key, value in value.map { " \(key)=\"\(escape($0))\"" } }.joined()
         var children = ""
+        if model.kind == .image, let name = model.imageName {
+            children += "\n\(pad)  <contents><CGImage src=\"assets/\(escape(name))\"/></contents>"
+        }
+        if model.kind == .video, !(model.syncWithState ?? false), let prefix = model.framePrefix {
+            let count = model.frameCount ?? 0
+            let ext = model.frameExtension ?? ".jpg"
+            if count > 0 { children += "\n\(pad)  <contents type=\"CGImage\" src=\"assets/\(escape(prefix))0\(escape(ext))\"/>" }
+            if count > 1 {
+                let frames = (0..<count).map { "\n\(pad)        <CGImage src=\"assets/\(escape(prefix))\($0)\(escape(ext))\"/>" }.joined()
+                children += "\n\(pad)  <animations>\n\(pad)    <animation type=\"CAKeyframeAnimation\" calculationMode=\"\(escape(model.calculationMode ?? "linear"))\" keyPath=\"contents\" beginTime=\"1e-100\" duration=\"\(number(model.videoDuration ?? (Double(count) / max(model.framesPerSecond ?? 30, 1))))\" removedOnCompletion=\"0\" repeatCount=\"inf\" autoreverses=\"\((model.autoReverses ?? false) ? "1" : "0")\">\n\(pad)      <values>\(frames)\n\(pad)      </values>\n\(pad)    </animation>\n\(pad)  </animations>"
+            }
+        }
         if model.kind == .gradient, let stops = model.gradientStops {
             children += "\n\(pad)  <colors>" + stops.map { "\n\(pad)    <CGColor value=\"\(color($0.color) ?? "1 1 1")\" opacity=\"\(number($0.opacity))\"/>" }.joined() + "\n\(pad)  </colors>"
             children += "\n\(pad)  <type value=\"\(escape(model.gradientType ?? "axial"))\"/>"

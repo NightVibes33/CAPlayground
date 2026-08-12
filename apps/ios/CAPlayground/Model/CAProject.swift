@@ -11,7 +11,47 @@ struct CAProjectDocument: Codable, Identifiable, Hashable {
     var gyroEnabled: Bool
     var activeCA: CADocumentKind
     var documents: [CADocumentKind: AnimationDocument]
+    var assets: [String: Data] = [:]
     var modifiedAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, width, height, background, geometryFlipped, gyroEnabled
+        case activeCA, documents, assets, modifiedAt
+    }
+
+    init(
+        id: UUID, name: String, width: Double, height: Double,
+        background: String?, geometryFlipped: Bool, gyroEnabled: Bool,
+        activeCA: CADocumentKind, documents: [CADocumentKind: AnimationDocument],
+        assets: [String: Data] = [:], modifiedAt: Date
+    ) {
+        self.id = id
+        self.name = name
+        self.width = width
+        self.height = height
+        self.background = background
+        self.geometryFlipped = geometryFlipped
+        self.gyroEnabled = gyroEnabled
+        self.activeCA = activeCA
+        self.documents = documents
+        self.assets = assets
+        self.modifiedAt = modifiedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        width = try values.decode(Double.self, forKey: .width)
+        height = try values.decode(Double.self, forKey: .height)
+        background = try values.decodeIfPresent(String.self, forKey: .background)
+        geometryFlipped = try values.decode(Bool.self, forKey: .geometryFlipped)
+        gyroEnabled = try values.decode(Bool.self, forKey: .gyroEnabled)
+        activeCA = try values.decode(CADocumentKind.self, forKey: .activeCA)
+        documents = try values.decode([CADocumentKind: AnimationDocument].self, forKey: .documents)
+        assets = try values.decodeIfPresent([String: Data].self, forKey: .assets) ?? [:]
+        modifiedAt = try values.decode(Date.self, forKey: .modifiedAt)
+    }
 
     var root: LayerModel {
         get { documents[activeCA]!.root }
@@ -217,6 +257,9 @@ struct LayerModel: Codable, Identifiable, Hashable {
     var gradientStops: [GradientStop]?
     var frameCount: Int?
     var framesPerSecond: Double?
+    var videoDuration: Double?
+    var framePrefix: String?
+    var frameExtension: String?
     var calculationMode: String?
     var autoReverses: Bool?
     var syncWithState: Bool?
@@ -247,6 +290,34 @@ struct StateOverride: Codable, Hashable {
 enum OverrideValue: Codable, Hashable {
     case number(Double)
     case string(String)
+}
+
+extension CAProjectDocument {
+    func overrideValue(targetID: UUID, keyPath: String) -> OverrideValue? {
+        guard activeState != "Base State" else { return nil }
+        return stateOverrides[activeState]?.last { $0.targetID == targetID && $0.keyPath == keyPath }?.value
+    }
+
+    mutating func setOverride(targetID: UUID, keyPath: String, value: OverrideValue) {
+        guard activeState != "Base State" else { return }
+        var overrides = stateOverrides
+        var values = overrides[activeState] ?? []
+        if let index = values.firstIndex(where: { $0.targetID == targetID && $0.keyPath == keyPath }) {
+            values[index].value = value
+        } else {
+            values.append(.init(targetID: targetID, keyPath: keyPath, value: value))
+        }
+        overrides[activeState] = values
+        stateOverrides = overrides
+    }
+
+    mutating func updateStateAware(targetID: UUID, values: [String: Double], baseMutation: (inout LayerModel) -> Void) {
+        if activeState == "Base State" {
+            root.update(id: targetID, mutation: baseMutation)
+        } else {
+            for (keyPath, value) in values { setOverride(targetID: targetID, keyPath: keyPath, value: .number(value)) }
+        }
+    }
 }
 
 struct StateTransition: Codable, Hashable, Identifiable {

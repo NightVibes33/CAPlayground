@@ -5,20 +5,33 @@ import CoreImage
 @MainActor
 final class CoreAnimationRenderer {
     private(set) var renderedLayers: [UUID: CALayer] = [:]
+    private var selectableIDs: Set<UUID> = []
+    private var assets: [String: Data] = [:]
 
-    func render(project: CAProjectDocument, into host: CALayer) {
+    func render(project: CAProjectDocument, showBackground: Bool, into host: CALayer) {
         host.sublayers?.forEach { $0.removeFromSuperlayer() }
         renderedLayers.removeAll(keepingCapacity: true)
+        selectableIDs.removeAll(keepingCapacity: true)
+        assets = project.assets
+        host.backgroundColor = UIColor(caHex: project.background ?? "#F3F4F6")?.cgColor
+        if showBackground, project.activeCA == .floating, let background = project.documents[.background] {
+            let backgroundRoot = makeLayer(from: background.root, selectable: false)
+            backgroundRoot.bounds = CGRect(x: 0, y: 0, width: CGFloat(project.width), height: CGFloat(project.height))
+            backgroundRoot.position = CGPoint(x: CGFloat(project.width / 2), y: CGFloat(project.height / 2))
+            host.addSublayer(backgroundRoot)
+            apply(state: project.activeState, document: background)
+        }
         let root = makeLayer(from: project.root)
         root.bounds = CGRect(x: 0, y: 0, width: CGFloat(project.width), height: CGFloat(project.height))
         root.position = CGPoint(x: CGFloat(project.width / 2), y: CGFloat(project.height / 2))
         host.addSublayer(root)
-        apply(state: project.activeState, project: project)
+        apply(state: project.activeState, document: project.documents[project.activeCA]!)
     }
 
     func layer(for id: UUID) -> CALayer? { renderedLayers[id] }
+    func isSelectable(_ id: UUID) -> Bool { selectableIDs.contains(id) }
 
-    private func makeLayer(from model: LayerModel) -> CALayer {
+    private func makeLayer(from model: LayerModel, selectable: Bool = true) -> CALayer {
         let layer: CALayer
         switch model.kind {
         case .basic:
@@ -44,9 +57,10 @@ final class CoreAnimationRenderer {
         }
 
         renderedLayers[model.id] = layer
+        if selectable { selectableIDs.insert(model.id) }
         layer.name = model.id.uuidString
         applyCommon(model, to: layer)
-        model.children.forEach { layer.addSublayer(makeLayer(from: $0)) }
+        model.children.forEach { layer.addSublayer(makeLayer(from: $0, selectable: selectable)) }
         applyAnimations(model.animations, to: layer)
         return layer
     }
@@ -105,7 +119,10 @@ final class CoreAnimationRenderer {
 
     private func makeImageLayer(_ model: LayerModel) -> CALayer {
         let layer = CALayer()
-        if let name = model.imageName, let image = UIImage(named: name) { layer.contents = image.cgImage }
+        if let name = model.imageName,
+           let image = assets[name].flatMap(UIImage.init(data:)) ?? UIImage(named: name) {
+            layer.contents = image.cgImage
+        }
         layer.contentsGravity = switch model.contentMode {
         case "contain": .resizeAspect
         case "fill": .resize
@@ -151,13 +168,17 @@ final class CoreAnimationRenderer {
 
     private func makeFrameSequenceLayer(_ model: LayerModel) -> CALayer {
         let layer = CALayer()
-        guard let prefix = model.imageName, let count = model.frameCount, count > 0 else { return layer }
-        let frames = (0..<count).compactMap { UIImage(named: "\(prefix)\($0)")?.cgImage }
+        guard let prefix = model.framePrefix ?? model.imageName, let count = model.frameCount, count > 0 else { return layer }
+        let ext = model.frameExtension ?? ""
+        let frames = (0..<count).compactMap { index in
+            let name = "\(prefix)\(index)\(ext)"
+            return (assets[name].flatMap(UIImage.init(data:)) ?? UIImage(named: name))?.cgImage
+        }
         guard !frames.isEmpty else { return layer }
         layer.contents = frames[0]
         let animation = CAKeyframeAnimation(keyPath: "contents")
         animation.values = frames
-        animation.duration = Double(frames.count) / max(model.framesPerSecond ?? 30, 1)
+        animation.duration = model.videoDuration ?? (Double(frames.count) / max(model.framesPerSecond ?? 30, 1))
         animation.calculationMode = .discrete
         animation.repeatCount = .infinity
         layer.add(animation, forKey: "frames")
@@ -184,7 +205,7 @@ final class CoreAnimationRenderer {
             cell.spin = CGFloat(model.spin * .pi / 180); cell.spinRange = CGFloat(model.spinRange * .pi / 180)
             cell.xAcceleration = CGFloat(model.xAcceleration); cell.yAcceleration = CGFloat(model.yAcceleration)
             cell.color = UIColor(caHex: model.color)?.cgColor
-            cell.contents = model.imageName.flatMap(UIImage.init(named:))?.cgImage ?? UIImage(systemName: "sparkle")?.withTintColor(.white).cgImage
+            cell.contents = model.imageName.flatMap { name in assets[name].flatMap(UIImage.init(data:)) ?? UIImage(named: name) }?.cgImage ?? UIImage(systemName: "sparkle")?.withTintColor(.white).cgImage
             return cell
         }
         return layer
@@ -225,8 +246,8 @@ final class CoreAnimationRenderer {
         }
     }
 
-    private func apply(state: String, project: CAProjectDocument) {
-        guard let overrides = project.stateOverrides[state] else { return }
+    private func apply(state: String, document: AnimationDocument) {
+        guard let overrides = document.stateOverrides[state] else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for override in overrides {
@@ -235,6 +256,14 @@ final class CoreAnimationRenderer {
             case ("opacity", .number(let value)): layer.opacity = Float(value)
             case ("position.x", .number(let value)): layer.position.x = CGFloat(value)
             case ("position.y", .number(let value)): layer.position.y = CGFloat(value)
+            case ("zPosition", .number(let value)): layer.zPosition = CGFloat(value)
+            case ("bounds.size.width", .number(let value)): layer.bounds.size.width = CGFloat(value)
+            case ("bounds.size.height", .number(let value)): layer.bounds.size.height = CGFloat(value)
+            case ("cornerRadius", .number(let value)): layer.cornerRadius = CGFloat(value)
+            case ("transform.scale.xy", .number(let value)): layer.setValue(value, forKeyPath: "transform.scale")
+            case ("transform.rotation.z", .number(let value)): layer.setValue(value * .pi / 180, forKeyPath: "transform.rotation.z")
+            case ("transform.rotation.x", .number(let value)): layer.setValue(value * .pi / 180, forKeyPath: "transform.rotation.x")
+            case ("transform.rotation.y", .number(let value)): layer.setValue(value * .pi / 180, forKeyPath: "transform.rotation.y")
             case ("backgroundColor", .string(let value)): layer.backgroundColor = UIColor(caHex: value)?.cgColor
             default: break
             }

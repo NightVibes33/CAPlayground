@@ -16,6 +16,10 @@ struct EditorView: View {
     @State private var showExport = false
     @State private var saveTask: Task<Void, Never>?
     @State private var saving = false
+    @State private var renameOpen = false
+    @State private var renameValue = ""
+    @State private var deleteOpen = false
+    @State private var showBackground = true
 
     init(initialProject: CAProjectDocument) { _project = State(initialValue: initialProject) }
 
@@ -35,6 +39,13 @@ struct EditorView: View {
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showExport) { ExportView(project: project) }
+        .sheet(isPresented: $renameOpen) { renameDialog }
+        .confirmationDialog("Delete Project", isPresented: $deleteOpen, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { store.delete(project); dismiss() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This action cannot be undone.")
+        }
         .onChange(of: project) { oldValue, newValue in scheduleSave(oldValue: oldValue, newValue: newValue) }
         .onDisappear { store.update(project) }
     }
@@ -95,7 +106,7 @@ struct EditorView: View {
     }
 
     private var canvas: some View {
-        EditorCanvasRepresentable(project: $project, selectedID: $selectedID)
+        EditorCanvasRepresentable(project: $project, selectedID: $selectedID, showBackground: showBackground)
             .clipShape(RoundedRectangle(cornerRadius: CATheme.radius, style: .continuous))
             .overlay(alignment: .topLeading) {
                 HStack(spacing: 8) {
@@ -115,8 +126,8 @@ struct EditorView: View {
         HStack(spacing: 8) {
             Menu {
                 Button("Back to projects", systemImage: "arrow.left") { store.update(project); dismiss() }
-                Button("Rename", systemImage: "pencil") {}
-                Button("Delete", systemImage: "trash", role: .destructive) { store.delete(project); dismiss() }
+                Button("Rename", systemImage: "pencil") { renameValue = project.name; renameOpen = true }
+                Button("Delete", systemImage: "trash", role: .destructive) { deleteOpen = true }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.left")
@@ -142,6 +153,25 @@ struct EditorView: View {
         .background(.regularMaterial).overlay(alignment: .bottom) { Divider() }
     }
 
+    private var renameDialog: some View {
+        NavigationStack {
+            Form { TextField("Project name", text: $renameValue) }
+                .navigationTitle("Rename Project")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { renameOpen = false } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            project.name = renameValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                            renameOpen = false
+                        }
+                        .disabled(renameValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+        }
+        .presentationDetents([.height(220)])
+    }
+
     @ViewBuilder private var activeCAMenu: some View {
         if project.gyroEnabled {
             Text("Wallpaper").font(.subheadline).padding(.horizontal, 12).frame(height: 36)
@@ -149,6 +179,9 @@ struct EditorView: View {
         } else {
             Menu {
                 Section("Choose Active CA") {
+                    if project.activeCA == .floating {
+                        Toggle("Show background", isOn: $showBackground)
+                    }
                     Button { project.activeCA = .background; selectedID = project.documents[.background]?.selectedID } label: {
                         Label("Background — Appears behind the clock.", systemImage: project.activeCA == .background ? "checkmark" : "square.3.layers.3d")
                     }

@@ -1,8 +1,10 @@
 import SwiftUI
 
 struct HomeView: View {
+    @Environment(AuthStore.self) private var auth
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @AppStorage("appearance") private var appearance = "system"
 
     private let layers: [(LayerKind, String)] = [
         (.basic, "A fundamental solid color or shape layer (CALayer) for backgrounds or simple elements."),
@@ -38,23 +40,46 @@ struct HomeView: View {
             Spacer()
             if horizontalSizeClass == .compact {
                 Menu {
-                    NavigationLink("Docs") { NativeTextPage(title: "Docs") }
-                    NavigationLink("Contributors") { NativeTextPage(title: "Contributors") }
-                    NavigationLink("Roadmap") { NativeTextPage(title: "Roadmap") }
-                    NavigationLink("Wallpapers") { NativeTextPage(title: "Wallpapers") }
+                    Link("Docs", destination: URL(string: "https://docs.enkei64.xyz")!)
+                    NavigationLink("Contributors") { ContributorsView() }
+                    NavigationLink("Roadmap") { RoadmapView() }
+                    NavigationLink("Wallpapers") { WallpapersView() }
+                    if auth.isSignedIn {
+                        NavigationLink("Account") { AccountView() }
+                    } else {
+                        NavigationLink("Sign In") { SignInView() }
+                    }
                     NavigationLink("Projects") { ProjectsView() }
+                    Button(appearance == "dark" ? "Light Mode" : "Dark Mode", systemImage: appearance == "dark" ? "sun.max" : "moon") { toggleTheme() }
                 } label: { Image(systemName: "line.3.horizontal").frame(width: 40, height: 40) }
             } else {
                 HStack(spacing: 24) {
-                    NavigationLink("Docs") { NativeTextPage(title: "Docs") }
-                    NavigationLink("Contributors") { NativeTextPage(title: "Contributors") }
-                    NavigationLink("Roadmap") { NativeTextPage(title: "Roadmap") }
-                    NavigationLink("Wallpapers") { NativeTextPage(title: "Wallpapers") }
+                    Link("Docs", destination: URL(string: "https://docs.enkei64.xyz")!)
+                    NavigationLink("Contributors") { ContributorsView() }
+                    NavigationLink("Roadmap") { RoadmapView() }
+                    NavigationLink("Wallpapers") { WallpapersView() }
                 }.font(.subheadline).foregroundStyle(.primary)
+                if auth.isSignedIn {
+                    Menu {
+                        NavigationLink("Dashboard") { AccountView() }
+                        Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { Task { await auth.signOut() } }
+                    } label: { Image(systemName: "person").frame(width: 36, height: 36) }
+                } else {
+                    NavigationLink("Sign In") { SignInView() }.buttonStyle(.bordered)
+                }
+                NavigationLink(destination: ProjectsView()) {
+                    Label("Projects", systemImage: "arrow.right").labelStyle(.titleAndIcon)
+                }.buttonStyle(.borderedProminent).tint(CATheme.accent)
+                Button { toggleTheme() } label: { Image(systemName: appearance == "dark" ? "sun.max" : "moon").frame(width: 36, height: 36) }
+                    .buttonStyle(.plain).accessibilityLabel("Toggle theme")
             }
         }
         .padding(.horizontal, 20).frame(height: 56)
         .background(.regularMaterial).overlay(alignment: .bottom) { Divider() }
+    }
+
+    private func toggleTheme() {
+        appearance = scheme == .dark ? "light" : "dark"
     }
 
     private var hero: some View {
@@ -159,9 +184,4 @@ private struct LayerPreview: View {
             }
         }
     }
-}
-
-private struct NativeTextPage: View {
-    let title: String
-    var body: some View { Text(title).font(.largeTitle.bold()).navigationTitle(title) }
 }

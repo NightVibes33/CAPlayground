@@ -8,6 +8,7 @@ struct ProjectsView: View {
 
     @Environment(ProjectStore.self) private var store
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
     @State private var path: [UUID] = []
     @State private var query = ""
     @State private var dateFilter: DateFilter = .all
@@ -18,6 +19,8 @@ struct ProjectsView: View {
     @State private var createOpen = false
     @State private var importOpen = false
     @State private var pendingDelete: CAProjectDocument?
+    @State private var pendingRename: CAProjectDocument?
+    @State private var renameValue = ""
     @State private var projectName = ""
     @State private var width = 390.0
     @State private var height = 844.0
@@ -65,6 +68,7 @@ struct ProjectsView: View {
                 if let project = store.projects.first(where: { $0.id == id }) { EditorView(initialProject: project) }
             }
             .sheet(isPresented: $createOpen) { createProjectDialog }
+            .sheet(item: $pendingRename) { project in renameProjectDialog(project) }
             .fileImporter(isPresented: $importOpen, allowedContentTypes: [.caPlaygroundProject, .zip], allowsMultipleSelection: false) { result in
                 guard case .success(let urls) = result, let url = urls.first else { return }
                 importProject(url)
@@ -80,7 +84,7 @@ struct ProjectsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Button(action: {}) { Label("Back", systemImage: "arrow.left") }
+            Button { dismiss() } label: { Label("Back", systemImage: "arrow.left") }
                 .buttonStyle(.plain).font(.subheadline)
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .bottom, spacing: 24) { titleAndFilters; actionButtons }
@@ -105,7 +109,6 @@ struct ProjectsView: View {
                 .padding(2).overlay(RoundedRectangle(cornerRadius: 6).stroke(.separator))
                 Menu {
                     Section("Time Period") { ForEach(DateFilter.allCases, id: \.self) { option in checkButton(option.rawValue, selected: dateFilter == option) { dateFilter = option } } }
-                    Section("Storage Location") { checkButton("All locations", selected: true) {} ; Button("Device only") {} ; Button("Cloud only") {} ; Button("Device and Cloud") {} }
                     Section("Sort By") { ForEach(SortOrder.allCases, id: \.self) { option in checkButton(option.rawValue, selected: sortOrder == option) { sortOrder = option } } }
                 } label: { Image(systemName: "slider.horizontal.3").frame(width: 38, height: 38) }
                     .buttonStyle(.bordered)
@@ -125,8 +128,6 @@ struct ProjectsView: View {
                     for project in store.projects where selectedIDs.contains(project.id) { store.delete(project) }
                     selectedIDs.removeAll()
                 }.buttonStyle(.borderedProminent).tint(CATheme.destructive).disabled(selectedIDs.isEmpty)
-                Button("Sync to Cloud (\(selectedIDs.count))", systemImage: "cloud") {}
-                    .buttonStyle(.bordered).disabled(selectedIDs.isEmpty)
             } else {
                 Button("Import", systemImage: "square.and.arrow.down") { importOpen = true }.buttonStyle(.bordered)
                 Button("New Project", systemImage: "plus") { createOpen = true }.buttonStyle(.borderedProminent)
@@ -168,7 +169,7 @@ struct ProjectsView: View {
                     }
                     Spacer()
                     Menu {
-                        Button("Rename", systemImage: "pencil") {}
+                        Button("Rename", systemImage: "pencil") { beginRename(project) }
                         Button("Delete", systemImage: "trash", role: .destructive) { pendingDelete = project }
                     } label: { Image(systemName: "ellipsis.vertical").frame(width: 32, height: 32) }
                 }
@@ -212,6 +213,38 @@ struct ProjectsView: View {
         }.presentationDetents([.medium])
     }
 
+    private func renameProjectDialog(_ project: CAProjectDocument) -> some View {
+        NavigationStack {
+            Form {
+                TextField("Project name", text: $renameValue)
+                    .textInputAutocapitalization(.words)
+            }
+            .navigationTitle("Rename Project")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { pendingRename = nil; renameValue = "" }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        var renamed = project
+                        renamed.name = renameValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        store.update(renamed)
+                        pendingRename = nil
+                        renameValue = ""
+                    }
+                    .disabled(renameValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.height(220)])
+    }
+
+    private func beginRename(_ project: CAProjectDocument) {
+        renameValue = project.name
+        pendingRename = project
+    }
+
     private func create() {
         let bounds = useDeviceBounds ? (selectedDevice.width, selectedDevice.height) : (width, height)
         let project = store.createProject(name: projectName, width: bounds.0, height: bounds.1, gyroEnabled: gyroEnabled)
@@ -226,8 +259,13 @@ struct ProjectsView: View {
     private func importProject(_ url: URL) {
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
-        guard let data = try? Data(contentsOf: url), let project = try? JSONDecoder().decode(CAProjectDocument.self, from: data) else { return }
-        store.update(project)
+        guard let data = try? Data(contentsOf: url) else { return }
+        if let project = try? JSONDecoder().decode(CAProjectDocument.self, from: data) {
+            store.update(project)
+        } else if let project = try? CAArchiveImporter.importProject(data: data, suggestedName: url.deletingPathExtension().lastPathComponent) {
+            store.update(project)
+            path.append(project.id)
+        }
     }
 
     private func modeButton(_ mode: ViewMode, symbol: String) -> some View {

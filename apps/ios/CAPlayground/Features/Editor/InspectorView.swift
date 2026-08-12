@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct InspectorView: View {
     enum Tab: String, CaseIterable, Identifiable {
@@ -18,6 +19,7 @@ struct InspectorView: View {
     @Binding var project: CAProjectDocument
     @Binding var selectedID: UUID?
     @State private var activeTab: Tab = .geometry
+    @State private var imageImporterOpen = false
 
     private var selected: LayerModel? { selectedID.flatMap { project.root.find(id: $0) } }
     private var tabs: [Tab] {
@@ -67,7 +69,12 @@ struct InspectorView: View {
             } else {
                 ContentUnavailableView("Select a layer to edit its properties.", systemImage: "square.slash")
             }
-        }.caPanel()
+        }
+        .caPanel()
+        .fileImporter(isPresented: $imageImporterOpen, allowedContentTypes: [.image], allowsMultipleSelection: false) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            importImage(url)
+        }
     }
 
     @ViewBuilder private func tabContent(_ layer: LayerModel) -> some View {
@@ -150,7 +157,7 @@ struct InspectorView: View {
 
     @ViewBuilder private func image(_ layer: LayerModel) -> some View {
         Label(layer.imageName ?? "No image selected", systemImage: "photo")
-        Button("Replace Image…") { }
+        Button("Replace Image…") { imageImporterOpen = true }
         Picker("Fit", selection: optionalString(\.contentMode, layer.contentMode ?? "fill")) { Text("Cover").tag("cover"); Text("Contain").tag("contain"); Text("Fill").tag("fill"); Text("None").tag("none") }
     }
 
@@ -213,17 +220,65 @@ struct InspectorView: View {
     }
 
     private func update(_ mutation: (inout LayerModel) -> Void) { guard let selectedID else { return }; project.root.update(id: selectedID, mutation: mutation) }
-    private func value<T>(_ keyPath: WritableKeyPath<LayerModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selectedID.flatMap { project.root.find(id: $0) }?[keyPath: keyPath] ?? fallback }, set: { new in update { $0[keyPath: keyPath] = new } }) }
+    private func importImage(_ url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else { return }
+        var name = url.lastPathComponent
+        if name.isEmpty { name = "image-\(UUID().uuidString).png" }
+        if project.assets[name] != nil {
+            let base = url.deletingPathExtension().lastPathComponent
+            name = "\(base)-\(UUID().uuidString.prefix(8)).\(url.pathExtension.isEmpty ? "png" : url.pathExtension)"
+        }
+        project.assets[name] = data
+        update { $0.imageName = name }
+    }
+    private func value<T>(_ keyPath: WritableKeyPath<LayerModel, T>, _ fallback: T) -> Binding<T> {
+        Binding(get: {
+            if let selectedID, let stateKey = stateKey(for: keyPath), case .number(let number) = project.overrideValue(targetID: selectedID, keyPath: stateKey), let typed = number as? T { return typed }
+            return selectedID.flatMap { project.root.find(id: $0) }?[keyPath: keyPath] ?? fallback
+        }, set: { new in
+            if let selectedID, project.activeState != "Base State", let stateKey = stateKey(for: keyPath), let number = new as? Double {
+                project.setOverride(targetID: selectedID, keyPath: stateKey, value: .number(number))
+            } else { update { $0[keyPath: keyPath] = new } }
+        })
+    }
     private func optionalString(_ keyPath: WritableKeyPath<LayerModel, String?>, _ fallback: String) -> Binding<String> { Binding(get: { selectedID.flatMap { project.root.find(id: $0) }?[keyPath: keyPath] ?? fallback }, set: { new in update { $0[keyPath: keyPath] = new } }) }
     private func optionalBool(_ keyPath: WritableKeyPath<LayerModel, Bool?>, _ fallback: Bool) -> Binding<Bool> { Binding(get: { selectedID.flatMap { project.root.find(id: $0) }?[keyPath: keyPath] ?? fallback }, set: { new in update { $0[keyPath: keyPath] = new } }) }
     private func field(_ title: String, _ fallback: Double, _ keyPath: WritableKeyPath<LayerModel, Double>) -> some View { LabeledContent(title) { TextField(title, value: value(keyPath, fallback), format: .number).multilineTextAlignment(.trailing).keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
     private func optionalField(_ title: String, _ fallback: Double, _ keyPath: WritableKeyPath<LayerModel, Double?>) -> some View { LabeledContent(title) { TextField(title, value: Binding(get: { selectedID.flatMap { project.root.find(id: $0) }?[keyPath: keyPath] ?? fallback }, set: { new in update { $0[keyPath: keyPath] = new } }), format: .number).multilineTextAlignment(.trailing).keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
     private func optionalIntegerField(_ title: String, _ fallback: Int, _ keyPath: WritableKeyPath<LayerModel, Int?>) -> some View { LabeledContent(title) { TextField(title, value: Binding(get: { selectedID.flatMap { project.root.find(id: $0) }?[keyPath: keyPath] ?? fallback }, set: { new in update { $0[keyPath: keyPath] = new } }), format: .number).multilineTextAlignment(.trailing).keyboardType(.numberPad).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
-    private func colorField(_ title: String, _ fallback: String, _ keyPath: WritableKeyPath<LayerModel, String?>) -> some View { ColorPicker(title, selection: colorBinding(fallback) { hex in update { $0[keyPath: keyPath] = hex } }) }
+    private func colorField(_ title: String, _ fallback: String, _ keyPath: WritableKeyPath<LayerModel, String?>) -> some View {
+        let displayed: String = {
+            if let selectedID, keyPath == \.backgroundColor, case .string(let value) = project.overrideValue(targetID: selectedID, keyPath: "backgroundColor") { return value }
+            return selectedID.flatMap { project.root.find(id: $0) }?[keyPath: keyPath] ?? fallback
+        }()
+        return ColorPicker(title, selection: colorBinding(displayed) { hex in
+            if let selectedID, project.activeState != "Base State", keyPath == \.backgroundColor {
+                project.setOverride(targetID: selectedID, keyPath: "backgroundColor", value: .string(hex))
+            } else { update { $0[keyPath: keyPath] = hex } }
+        })
+    }
     private func colorBinding(_ hex: String, set: @escaping (String) -> Void) -> Binding<Color> { Binding(get: { Color(uiColor: UIColor(caHex: hex) ?? .white) }, set: { color in if let components = UIColor(color).cgColor.components, components.count >= 3 { set(String(format: "#%02X%02X%02X", Int(components[0] * 255), Int(components[1] * 255), Int(components[2] * 255))) } }) }
     private func pointEditor(_ title: String, keyPath: WritableKeyPath<LayerModel, Vector2?>, point: Vector2) -> some View { VStack(alignment: .leading) { Text(title).font(.caption).foregroundStyle(.secondary); HStack { TextField("X", value: Binding(get: { point.x }, set: { v in update { var p = $0[keyPath: keyPath] ?? point; p.x = v; $0[keyPath: keyPath] = p } }), format: .number).textFieldStyle(.roundedBorder); TextField("Y", value: Binding(get: { point.y }, set: { v in update { var p = $0[keyPath: keyPath] ?? point; p.y = v; $0[keyPath: keyPath] = p } }), format: .number).textFieldStyle(.roundedBorder) } } }
     private func sizeEditor(_ title: String, keyPath: WritableKeyPath<LayerModel, LayerSize?>, size: LayerSize) -> some View { VStack(alignment: .leading) { Text(title).font(.caption).foregroundStyle(.secondary); HStack { TextField("Width", value: Binding(get: { size.width }, set: { v in update { var s = $0[keyPath: keyPath] ?? size; s.width = v; $0[keyPath: keyPath] = s } }), format: .number).textFieldStyle(.roundedBorder); TextField("Height", value: Binding(get: { size.height }, set: { v in update { var s = $0[keyPath: keyPath] ?? size; s.height = v; $0[keyPath: keyPath] = s } }), format: .number).textFieldStyle(.roundedBorder) } } }
     private func animationBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.animations.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { new in update { layer in if let i = layer.animations.firstIndex(where: { $0.id == id }) { layer.animations[i][keyPath: keyPath] = new } } }) }
     private func animationField(_ title: String, _ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, Double>, _ fallback: Double) -> some View { LabeledContent(title) { TextField(title, value: animationBinding(id, keyPath, fallback), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
     private func filterBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<FilterModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.filters.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { new in update { layer in if let i = layer.filters.firstIndex(where: { $0.id == id }) { layer.filters[i][keyPath: keyPath] = new } } }) }
+
+    private func stateKey<T>(for keyPath: WritableKeyPath<LayerModel, T>) -> String? {
+        let path = keyPath as AnyKeyPath
+        if path == \LayerModel.position.x { return "position.x" }
+        if path == \LayerModel.position.y { return "position.y" }
+        if path == \LayerModel.zPosition { return "zPosition" }
+        if path == \LayerModel.size.width { return "bounds.size.width" }
+        if path == \LayerModel.size.height { return "bounds.size.height" }
+        if path == \LayerModel.scale { return "transform.scale.xy" }
+        if path == \LayerModel.rotation { return "transform.rotation.z" }
+        if path == \LayerModel.rotationX { return "transform.rotation.x" }
+        if path == \LayerModel.rotationY { return "transform.rotation.y" }
+        if path == \LayerModel.opacity { return "opacity" }
+        if path == \LayerModel.cornerRadius { return "cornerRadius" }
+        return nil
+    }
 }

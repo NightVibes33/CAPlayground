@@ -1,0 +1,372 @@
+import AVKit
+import Foundation
+import SwiftUI
+import UIKit
+
+private struct WallpapersResponse: Codable, Sendable {
+    let baseURL: URL
+    let wallpapers: [WallpaperItem]
+
+    enum CodingKeys: String, CodingKey {
+        case baseURL = "base_url"
+        case wallpapers
+    }
+}
+
+private struct WallpaperItem: Codable, Identifiable, Sendable {
+    let id: String
+    let name: String
+    let creator: String
+    let description: String
+    let file: String
+    let preview: String
+    let date: Double?
+    let from: String
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        if let stringID = try? values.decode(String.self, forKey: .id) {
+            id = stringID
+        } else {
+            id = String(try values.decode(Int.self, forKey: .id))
+        }
+        name = try values.decode(String.self, forKey: .name)
+        creator = try values.decode(String.self, forKey: .creator)
+        description = try values.decode(String.self, forKey: .description)
+        file = try values.decode(String.self, forKey: .file)
+        preview = try values.decode(String.self, forKey: .preview)
+        date = try values.decodeIfPresent(Double.self, forKey: .date)
+        from = try values.decode(String.self, forKey: .from)
+    }
+}
+
+private struct WallpaperDownloadStat: Codable, Sendable {
+    let id: String
+    let downloads: Int
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        if let stringID = try? values.decode(String.self, forKey: .id) {
+            id = stringID
+        } else {
+            id = String(try values.decode(Int.self, forKey: .id))
+        }
+        downloads = try values.decode(Int.self, forKey: .downloads)
+    }
+}
+
+struct WallpapersView: View {
+    @Environment(ProjectStore.self) private var store
+
+    private enum SortOrder: String, CaseIterable {
+        case oldest = "Oldest to Newest"
+        case newest = "Newest to Oldest"
+        case downloads = "Most Downloads"
+        case leastDownloads = "Least Downloads"
+    }
+
+    @State private var response: WallpapersResponse?
+    @State private var query = ""
+    @State private var sortOrder: SortOrder = .downloads
+    @State private var downloadStats: [String: Int] = [:]
+    @State private var selected: WallpaperItem?
+    @State private var isLoading = true
+    @State private var failed = false
+    @State private var importingID: String?
+    @State private var importedProject: CAProjectDocument?
+    @State private var importError: String?
+
+    private var wallpapers: [WallpaperItem] {
+        guard let response else { return [] }
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = response.wallpapers.filter { item in
+            term.isEmpty || item.name.lowercased().contains(term) || item.creator.lowercased().contains(term) || item.description.lowercased().contains(term)
+        }
+        switch sortOrder {
+        case .newest:
+            return filtered.sorted { ($0.date ?? 0) > ($1.date ?? 0) }
+        case .oldest:
+            return filtered.sorted { ($0.date ?? 0) < ($1.date ?? 0) }
+        case .downloads, .leastDownloads:
+            return filtered.sorted {
+                let left = downloadStats[$0.id] ?? 0
+                let right = downloadStats[$1.id] ?? 0
+                return sortOrder == .downloads ? left > right : left < right
+            }
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 32) {
+                VStack(spacing: 12) {
+                    Text("Wallpaper Gallery")
+                        .font(.system(size: 50, weight: .bold))
+                    Text("Browse wallpapers made by the CAPlayground community.")
+                        .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+
+                controls
+
+                if isLoading {
+                    ProgressView("Loading...").frame(minHeight: 260)
+                } else if failed || response == nil {
+                    Text("Unable to load wallpapers right now. Please try again later.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: 260)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 28)], spacing: 28) {
+                        ForEach(wallpapers) { item in
+                            wallpaperCard(item)
+                                .onTapGesture { selected = item }
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: 1120)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 64)
+            .frame(maxWidth: .infinity)
+        }
+        .navigationTitle("Wallpapers")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selected) { item in detail(item) }
+        .fullScreenCover(item: $importedProject) { project in
+            EditorView(initialProject: project)
+        }
+        .alert("Failed to open wallpaper", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+            Button("OK") { importError = nil }
+        } message: {
+            Text(importError ?? "Unknown error")
+        }
+        .task {
+            await loadWallpapers()
+            await loadDownloadStats()
+        }
+    }
+
+    private var controls: some View {
+        VStack(spacing: 12) {
+            Link(destination: URL(string: "https://caplayground.vercel.app/wallpapers")!) {
+                Label("Submit Wallpaper", systemImage: "square.and.arrow.up")
+            }
+            .buttonStyle(.borderedProminent)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { searchField; sortPicker }
+                VStack(spacing: 12) { searchField; sortPicker }
+            }
+        }
+        .frame(maxWidth: 660)
+    }
+
+    private var searchField: some View {
+        TextField("Search wallpapers by name, creator, or description...", text: $query)
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 460)
+    }
+
+    private var sortPicker: some View {
+        Menu {
+            ForEach(SortOrder.allCases, id: \.self) { order in
+                Button {
+                    sortOrder = order
+                } label: {
+                    Label(order.rawValue, systemImage: sortOrder == order ? "checkmark" : "")
+                }
+            }
+        } label: {
+            Text(sortOrder.rawValue)
+                .frame(minWidth: 150)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func wallpaperCard(_ item: WallpaperItem) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            preview(item)
+                .aspectRatio(1, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.secondary.opacity(0.25)))
+
+            Text(item.name).font(.body.weight(.medium)).lineLimit(1)
+            Text("by \(item.creator) (submitted on \(item.from))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Text(item.description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+
+            if let downloads = downloadStats[item.id], downloads > 0 {
+                Label("\(downloads) \(downloads == 1 ? "Download" : "Downloads")", systemImage: "arrow.down.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            actions(item)
+        }
+        .padding(16)
+        .caPanel()
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func preview(_ item: WallpaperItem) -> some View {
+        if let url = previewURL(item), isVideo(url) {
+            WallpaperVideoPreview(url: url)
+        } else {
+            AsyncImage(url: previewURL(item)) { image in
+                image.resizable().scaledToFit()
+            } placeholder: {
+                ProgressView()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(uiColor: .systemBackground))
+        }
+    }
+
+    private func actions(_ item: WallpaperItem) -> some View {
+        VStack(spacing: 8) {
+            if let fileURL = fileURL(item) {
+                Link(destination: fileURL) {
+                    Label("Download .tendies", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Link(destination: URL(string: "pocketposter://download?url=\(fileURL.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")!) {
+                    Label("Open in Pocket Poster", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
+                    Task { await openInEditor(item, fileURL: fileURL) }
+                } label: {
+                    Label(importingID == item.id ? "Opening..." : "Open in Editor", systemImage: "pencil")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(importingID != nil)
+            }
+
+            Link(destination: URL(string: "https://www.youtube.com/watch?v=nSBQIwAaAEc")!) {
+                Label("Watch Tutorial", systemImage: "play.rectangle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private func detail(_ item: WallpaperItem) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    preview(item)
+                        .aspectRatio(1, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.secondary.opacity(0.25)))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Description").font(.headline)
+                        Text(item.description).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    actions(item)
+                    Button {
+                        UIPasteboard.general.url = URL(string: "https://caplayground.vercel.app/wallpapers?id=\(item.id)")!
+                    } label: {
+                        Label("Copy Link", systemImage: "doc.on.doc")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(24)
+            }
+            .navigationTitle(item.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .top) {
+                Text("by \(item.creator) (submitted on \(item.from))")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+            }
+        }
+    }
+
+    private func loadWallpapers() async {
+        guard let url = URL(string: "https://raw.githubusercontent.com/CAPlayground/wallpapers/refs/heads/main/wallpapers.json") else { return }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            self.response = try JSONDecoder().decode(WallpapersResponse.self, from: data)
+            failed = false
+        } catch {
+            failed = true
+        }
+        isLoading = false
+    }
+
+    private func loadDownloadStats() async {
+        guard let url = URL(string: "https://caplayground.vercel.app/api/wallpapers/stats") else { return }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return }
+            let stats = try JSONDecoder().decode([WallpaperDownloadStat].self, from: data)
+            downloadStats = Dictionary(uniqueKeysWithValues: stats.map { ($0.id, $0.downloads) })
+        } catch { }
+    }
+
+    private func openInEditor(_ item: WallpaperItem, fileURL: URL) async {
+        importingID = item.id
+        defer { importingID = nil }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: fileURL)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            let project = try CAArchiveImporter.importProject(data: data, suggestedName: item.name)
+            store.update(project)
+            selected = nil
+            importedProject = project
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func previewURL(_ item: WallpaperItem) -> URL? {
+        URL(string: item.preview, relativeTo: response?.baseURL)?.absoluteURL
+    }
+
+    private func fileURL(_ item: WallpaperItem) -> URL? {
+        URL(string: item.file, relativeTo: response?.baseURL)?.absoluteURL
+    }
+
+    private func isVideo(_ url: URL) -> Bool {
+        ["mp4", "mov"].contains(url.pathExtension.lowercased()) || url.path.lowercased().contains("/video/")
+    }
+}
+
+private struct WallpaperVideoPreview: View {
+    let url: URL
+    @State private var player: AVPlayer
+
+    init(url: URL) {
+        self.url = url
+        _player = State(initialValue: AVPlayer(url: url))
+    }
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .disabled(true)
+            .onAppear {
+                player.isMuted = true
+                player.play()
+            }
+            .onDisappear { player.pause() }
+            .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: player.currentItem)) { _ in
+                player.seek(to: .zero)
+                player.play()
+            }
+    }
+}
