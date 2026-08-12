@@ -44,6 +44,7 @@ struct HomeView: View {
                     NavigationLink("Contributors") { ContributorsView() }
                     NavigationLink("Roadmap") { RoadmapView() }
                     NavigationLink("Wallpapers") { WallpapersView() }
+                    NavigationLink("Tendies Checker") { TendiesCheckerView() }
                     if auth.isSignedIn {
                         NavigationLink("Account") { AccountView() }
                     } else {
@@ -161,7 +162,7 @@ struct HomeView: View {
     }
 
     private var footer: some View {
-        HStack { Text("CAPlayground").fontWeight(.bold); Spacer(); Text("Open Source Core Animation Wallpaper Editor").foregroundStyle(.secondary) }
+        HStack { Text("CAPlayground").fontWeight(.bold); Spacer(); NavigationLink("Tendies Checker") { TendiesCheckerView() }; Text("Open Source Core Animation Wallpaper Editor").foregroundStyle(.secondary) }
             .padding(24).overlay(alignment: .top) { Divider() }
     }
 }
