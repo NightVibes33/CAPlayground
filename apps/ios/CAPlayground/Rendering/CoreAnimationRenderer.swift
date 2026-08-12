@@ -31,29 +31,46 @@ final class CoreAnimationRenderer {
     func layer(for id: UUID) -> CALayer? { renderedLayers[id] }
     func isSelectable(_ id: UUID) -> Bool { selectableIDs.contains(id) }
 
+    func applyGyro(project: CAProjectDocument, x: Double, y: Double) {
+        let all = flatten(project.root)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for owner in all {
+            for dictionary in owner.gyroDictionaries ?? [] {
+                let targetModel = all.first(where: { $0.name == dictionary.layerName }) ?? owner
+                guard let target = renderedLayers[targetModel.id] else { continue }
+                let input = dictionary.axis == "y" ? y : x
+                let normalized = min(max((input + 1) / 2, 0), 1)
+                let value = dictionary.mapMinTo + (dictionary.mapMaxTo - dictionary.mapMinTo) * normalized
+                switch dictionary.keyPath {
+                case "position.x": target.position.x = CGFloat(value)
+                case "position.y": target.position.y = CGFloat(value)
+                case "transform.rotation.x": target.setValue(value * .pi / 180, forKeyPath: "transform.rotation.x")
+                case "transform.rotation.y": target.setValue(value * .pi / 180, forKeyPath: "transform.rotation.y")
+                case "transform.rotation.z": target.setValue(value * .pi / 180, forKeyPath: "transform.rotation.z")
+                case "opacity": target.opacity = Float(value)
+                default: target.setValue(value, forKeyPath: dictionary.keyPath)
+                }
+            }
+        }
+        CATransaction.commit()
+    }
+
+    private func flatten(_ layer: LayerModel) -> [LayerModel] { [layer] + layer.children.flatMap(flatten) }
+
     private func makeLayer(from model: LayerModel, selectable: Bool = true) -> CALayer {
         let layer: CALayer
         switch model.kind {
-        case .basic:
-            layer = CALayer()
-        case .shape:
-            layer = makeShapeLayer(model)
-        case .image:
-            layer = makeImageLayer(model)
-        case .text:
-            layer = makeTextLayer(model)
-        case .gradient:
-            layer = makeGradientLayer(model)
-        case .video:
-            layer = makeFrameSequenceLayer(model)
-        case .emitter:
-            layer = makeEmitterLayer(model)
-        case .transform:
-            layer = CATransformLayer()
-        case .replicator:
-            layer = makeReplicatorLayer(model)
-        case .liquidGlass:
-            layer = makePublicGlassFallbackLayer(model)
+        case .basic: layer = CALayer()
+        case .shape: layer = makeShapeLayer(model)
+        case .image: layer = makeImageLayer(model)
+        case .text: layer = makeTextLayer(model)
+        case .gradient: layer = makeGradientLayer(model)
+        case .video: layer = makeFrameSequenceLayer(model)
+        case .emitter: layer = makeEmitterLayer(model)
+        case .transform: layer = CATransformLayer()
+        case .replicator: layer = makeReplicatorLayer(model)
+        case .liquidGlass: layer = makePublicGlassFallbackLayer(model)
         }
 
         renderedLayers[model.id] = layer
@@ -72,8 +89,7 @@ final class CoreAnimationRenderer {
         layer.opacity = model.isVisible ? Float(model.opacity) : 0
         layer.speed = Float(model.speed)
         layer.anchorPoint = CGPoint(x: model.anchorPoint.x, y: model.anchorPoint.y)
-        layer.backgroundColor = UIColor(caHex: model.backgroundColor)?
-            .withAlphaComponent(CGFloat(model.backgroundOpacity)).cgColor
+        layer.backgroundColor = UIColor(caHex: model.backgroundColor)?.withAlphaComponent(CGFloat(model.backgroundOpacity)).cgColor
         layer.borderColor = UIColor(caHex: model.borderColor)?.cgColor
         layer.borderWidth = CGFloat(model.borderWidth)
         layer.cornerRadius = CGFloat(model.cornerRadius)
@@ -107,8 +123,7 @@ final class CoreAnimationRenderer {
         let rect = CGRect(x: 0, y: 0, width: CGFloat(model.size.width), height: CGFloat(model.size.height))
         switch model.shape ?? "rect" {
         case "circle": layer.path = UIBezierPath(ovalIn: rect).cgPath
-        case "rounded-rect":
-            layer.path = UIBezierPath(roundedRect: rect, cornerRadius: CGFloat(model.cornerRadius)).cgPath
+        case "rounded-rect": layer.path = UIBezierPath(roundedRect: rect, cornerRadius: CGFloat(model.cornerRadius)).cgPath
         default: layer.path = UIBezierPath(rect: rect).cgPath
         }
         layer.fillColor = UIColor(caHex: model.fillColor)?.cgColor
@@ -119,10 +134,7 @@ final class CoreAnimationRenderer {
 
     private func makeImageLayer(_ model: LayerModel) -> CALayer {
         let layer = CALayer()
-        if let name = model.imageName,
-           let image = assets[name].flatMap(UIImage.init(data:)) ?? UIImage(named: name) {
-            layer.contents = image.cgImage
-        }
+        if let name = model.imageName, let image = assets[name].flatMap(UIImage.init(data:)) ?? UIImage(named: name) { layer.contents = image.cgImage }
         layer.contentsGravity = switch model.contentMode {
         case "contain": .resizeAspect
         case "fill": .resize
@@ -145,24 +157,18 @@ final class CoreAnimationRenderer {
         default: .left
         }
         layer.isWrapped = model.wrapsText ?? true
-        layer.contentsScale = UIScreen.main.scale
+        layer.contentsScale = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen.scale }.first ?? 2
         return layer
     }
 
     private func makeGradientLayer(_ model: LayerModel) -> CAGradientLayer {
         let layer = CAGradientLayer()
-        let stops = model.gradientStops ?? [
-            .init(color: "#6366F1", opacity: 1), .init(color: "#5AD197", opacity: 1)
-        ]
+        let stops = model.gradientStops ?? [.init(color: "#6366F1", opacity: 1), .init(color: "#5AD197", opacity: 1)]
         layer.colors = stops.compactMap { UIColor(caHex: $0.color)?.withAlphaComponent($0.opacity).cgColor }
         layer.locations = stops.indices.map { NSNumber(value: Double($0) / Double(max(stops.count - 1, 1))) }
         layer.startPoint = CGPoint(x: CGFloat(model.gradientStart?.x ?? 0), y: CGFloat(model.gradientStart?.y ?? 0))
         layer.endPoint = CGPoint(x: CGFloat(model.gradientEnd?.x ?? 1), y: CGFloat(model.gradientEnd?.y ?? 1))
-        layer.type = switch model.gradientType {
-        case "radial": .radial
-        case "conic": .conic
-        default: .axial
-        }
+        layer.type = switch model.gradientType { case "radial": .radial; case "conic": .conic; default: .axial }
         return layer
     }
 
@@ -181,7 +187,8 @@ final class CoreAnimationRenderer {
         let animation = CAKeyframeAnimation(keyPath: "contents")
         animation.values = frames
         animation.duration = model.videoDuration ?? (Double(frames.count) / max(model.framesPerSecond ?? 30, 1))
-        animation.calculationMode = .discrete
+        animation.calculationMode = CAAnimationCalculationMode(rawValue: model.calculationMode ?? "discrete")
+        animation.autoreverses = model.autoReverses ?? false
         animation.repeatCount = .infinity
         layer.add(animation, forKey: "frames")
         return layer
@@ -189,8 +196,7 @@ final class CoreAnimationRenderer {
 
     private func makeEmitterLayer(_ model: LayerModel) -> CAEmitterLayer {
         let layer = CAEmitterLayer()
-        layer.emitterPosition = CGPoint(x: CGFloat(model.emitterPosition?.x ?? model.size.width / 2),
-                                        y: CGFloat(model.emitterPosition?.y ?? model.size.height / 2))
+        layer.emitterPosition = CGPoint(x: CGFloat(model.emitterPosition?.x ?? model.size.width / 2), y: CGFloat(model.emitterPosition?.y ?? model.size.height / 2))
         layer.emitterSize = CGSize(width: CGFloat(model.emitterSize?.width ?? 1), height: CGFloat(model.emitterSize?.height ?? 1))
         layer.emitterShape = CAEmitterLayerEmitterShape(rawValue: model.emitterShape ?? "point")
         layer.emitterMode = CAEmitterLayerEmitterMode(rawValue: model.emitterMode ?? "volume")
@@ -199,9 +205,7 @@ final class CoreAnimationRenderer {
             let cell = CAEmitterCell(); cell.name = model.name; cell.birthRate = Float(model.birthRate)
             cell.lifetime = Float(model.lifetime); cell.lifetimeRange = Float(model.lifetimeRange)
             cell.velocity = CGFloat(model.velocity); cell.velocityRange = CGFloat(model.velocityRange)
-            cell.emissionLongitude = CGFloat(model.emissionLongitude * .pi / 180)
-            cell.emissionLatitude = CGFloat(model.emissionLatitude * .pi / 180)
-            cell.emissionRange = CGFloat(model.emissionRange * .pi / 180)
+            cell.emissionLongitude = CGFloat(model.emissionLongitude * .pi / 180); cell.emissionLatitude = CGFloat(model.emissionLatitude * .pi / 180); cell.emissionRange = CGFloat(model.emissionRange * .pi / 180)
             cell.scale = CGFloat(model.scale); cell.scaleRange = CGFloat(model.scaleRange); cell.scaleSpeed = CGFloat(model.scaleSpeed)
             cell.alphaRange = Float(model.alphaRange); cell.alphaSpeed = Float(model.alphaSpeed)
             cell.spin = CGFloat(model.spin * .pi / 180); cell.spinRange = CGFloat(model.spinRange * .pi / 180)
@@ -217,18 +221,15 @@ final class CoreAnimationRenderer {
         let layer = CAReplicatorLayer()
         layer.instanceCount = model.instanceCount ?? 1
         layer.instanceDelay = model.instanceDelay ?? 0
-        var transform = CATransform3DMakeTranslation(
-            CGFloat(model.instanceTranslationX ?? 0), CGFloat(model.instanceTranslationY ?? 0), CGFloat(model.instanceTranslationZ ?? 0)
-        )
-        transform = CATransform3DRotate(transform, CGFloat(model.instanceRotation ?? 0), 0, 0, 1)
+        var transform = CATransform3DMakeTranslation(CGFloat(model.instanceTranslationX ?? 0), CGFloat(model.instanceTranslationY ?? 0), CGFloat(model.instanceTranslationZ ?? 0))
+        transform = CATransform3DRotate(transform, CGFloat((model.instanceRotation ?? 0) * .pi / 180), 0, 0, 1)
         layer.instanceTransform = transform
         return layer
     }
 
     private func makePublicGlassFallbackLayer(_ model: LayerModel) -> CALayer {
         let layer = CAGradientLayer()
-        layer.colors = [UIColor.white.withAlphaComponent(0.24).cgColor,
-                        UIColor.white.withAlphaComponent(0.08).cgColor]
+        layer.colors = [UIColor.white.withAlphaComponent(0.24).cgColor, UIColor.white.withAlphaComponent(0.08).cgColor]
         layer.borderColor = UIColor.white.withAlphaComponent(0.35).cgColor
         layer.borderWidth = CGFloat(max(model.borderWidth, 0.5))
         return layer
@@ -239,9 +240,7 @@ final class CoreAnimationRenderer {
             let animation = CAKeyframeAnimation(keyPath: model.keyPath)
             animation.values = (model.values ?? model.numericValues.map(AnimationValue.number)).compactMap { value in
                 switch value {
-                case .number(let number):
-                    let converted = model.keyPath.hasPrefix("transform.rotation") ? number * .pi / 180 : number
-                    return NSNumber(value: converted)
+                case .number(let number): return NSNumber(value: model.keyPath.hasPrefix("transform.rotation") ? number * .pi / 180 : number)
                 case .point(let point): return NSValue(cgPoint: CGPoint(x: CGFloat(point.x), y: CGFloat(point.y)))
                 case .size(let size): return NSValue(cgRect: CGRect(x: 0, y: 0, width: CGFloat(size.width), height: CGFloat(size.height)))
                 case .color(let hex): return UIColor(caHex: hex)?.cgColor
@@ -262,8 +261,7 @@ final class CoreAnimationRenderer {
 
     private func apply(state: String, document: AnimationDocument) {
         guard let overrides = document.stateOverrides[state] else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         for override in overrides {
             guard let layer = renderedLayers[override.targetID] else { continue }
             switch (override.keyPath, override.value) {
@@ -286,18 +284,13 @@ final class CoreAnimationRenderer {
     }
 
     private func timingName(_ value: String) -> CAMediaTimingFunctionName {
-        switch value {
-        case "easeIn": .easeIn
-        case "easeOut": .easeOut
-        case "easeInEaseOut": .easeInEaseOut
-        default: .linear
-        }
+        switch value { case "easeIn": .easeIn; case "easeOut": .easeOut; case "easeInEaseOut": .easeInEaseOut; default: .linear }
     }
 
     private func publicCompositingFilter(named name: String?) -> String? {
         switch name {
-        case "multiplyBlendMode", "screenBlendMode", "overlayBlendMode": name
-        default: nil
+        case "colorBlendMode", "colorBurnBlendMode", "colorDodgeBlendMode", "darkenBlendMode", "differenceBlendMode", "exclusionBlendMode", "hueBlendMode", "lightenBlendMode", "luminosityBlendMode", "multiplyBlendMode", "overlayBlendMode", "saturationBlendMode", "screenBlendMode": return name
+        default: return nil
         }
     }
 }

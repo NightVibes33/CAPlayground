@@ -1,9 +1,27 @@
 import SwiftUI
 
+enum EditorCanvasAction: Equatable {
+    case zoomIn, zoomOut, resetZoom, restartTimeline
+}
+
+struct EditorCanvasCommand: Equatable {
+    let id = UUID()
+    let action: EditorCanvasAction
+}
+
 struct EditorCanvasRepresentable: UIViewRepresentable {
     @Binding var project: CAProjectDocument
     @Binding var selectedID: UUID?
     var showBackground = true
+    var showPreview = false
+    var showEdgeGuide = false
+    var clipToCanvas = false
+    var showAnchorPoint = false
+    var gyroX = 0.0
+    var gyroY = 0.0
+    var timelineTime = 0.0
+    var timelinePlaying = false
+    var command: EditorCanvasCommand?
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -15,7 +33,20 @@ struct EditorCanvasRepresentable: UIViewRepresentable {
 
     func updateUIView(_ view: EditorCanvasView, context: Context) {
         context.coordinator.parent = self
-        view.display(project, selectedID: selectedID, showBackground: showBackground)
+        view.display(
+            project,
+            selectedID: selectedID,
+            showBackground: showBackground,
+            showPreview: showPreview,
+            showEdgeGuide: showEdgeGuide,
+            clipToCanvas: clipToCanvas,
+            showAnchorPoint: showAnchorPoint,
+            gyroX: gyroX,
+            gyroY: gyroY,
+            timelineTime: timelineTime,
+            timelinePlaying: timelinePlaying
+        )
+        if let command { view.perform(command) }
     }
 
     @MainActor
