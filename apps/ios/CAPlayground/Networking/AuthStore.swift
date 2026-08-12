@@ -280,6 +280,21 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
         } catch { self.error = error.localizedDescription; return [] }
     }
 
+    func submitWallpaper(name: String, description: String, tendies: Data, video: Data, videoExtension: String) async -> URL? {
+        guard let token = await validAccessToken() else { error = "You must be signed in to submit."; return nil }
+        do {
+            var request = URLRequest(url: URL(string: "https://caplayground.vercel.app/api/wallpapers/submit")!)
+            request.httpMethod = "POST"; request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization"); request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["name": name, "description": description, "username": username.isEmpty ? "Anonymous" : username, "tendiesBase64": tendies.base64EncodedString(), "videoBase64": video.base64EncodedString(), "videoExtension": videoExtension])
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                let api = try? JSONDecoder().decode(APIErrorBody.self, from: data); throw NSError(domain: "CAPlayground.Submission", code: 1, userInfo: [NSLocalizedDescriptionKey: api?.error ?? "Failed to submit wallpaper"])
+            }
+            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            return (object?["pullRequestURL"] as? String).flatMap(URL.init(string:))
+        } catch { self.error = error.localizedDescription; return nil }
+    }
+
     func signOut() async {
         if let token = session?.accessToken {
             _ = try? await request(path: "/auth/v1/logout", method: "POST", token: token)
