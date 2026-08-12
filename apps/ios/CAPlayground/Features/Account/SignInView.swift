@@ -6,18 +6,33 @@ struct SignInView: View {
 
     @Environment(AuthStore.self) private var auth
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("appearance") private var appearance = "system"
     @State private var mode: Mode = .signIn
     @State private var emailOrUsername = ""
     @State private var email = ""
     @State private var signupUsername = ""
     @State private var password = ""
+    @State private var showTerms = false
+    @State private var showPrivacy = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 HStack {
-                    Button { dismiss() } label: { Label("Back", systemImage: "arrow.left") }
+                    if mode != .forgotPassword {
+                        Button { dismiss() } label: { Label("Back", systemImage: "arrow.left") }
+                            .buttonStyle(.plain)
+                    }
                     Spacer()
+                    Button { toggleTheme() } label: {
+                        Image(systemName: colorScheme == .dark ? "sun.max" : "moon")
+                            .font(.system(size: 18))
+                            .frame(width: 36, height: 36)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Toggle theme")
                 }
                 card
                     .frame(maxWidth: 448)
@@ -29,6 +44,8 @@ struct SignInView: View {
         .background(Color(.systemBackground).ignoresSafeArea())
         .navigationBarBackButtonHidden()
         .onChange(of: auth.isSignedIn) { _, signedIn in if signedIn { dismiss() } }
+        .navigationDestination(isPresented: $showTerms) { TermsOfServiceView() }
+        .navigationDestination(isPresented: $showPrivacy) { PrivacyPolicyView() }
     }
 
     private var card: some View {
@@ -88,8 +105,7 @@ struct SignInView: View {
             field("Email", placeholder: "Your Email", icon: "at", text: $email, contentType: .emailAddress)
             secureField("Password", placeholder: "Create a Password", text: $password)
             messages
-            (Text("By signing up, you agree to our ") + Text("Terms of Service").underline() + Text(" and ") + Text("Privacy Policy").underline() + Text(". You must be at least 13 years old, or the minimum age of digital consent in your country."))
-                .font(.caption).foregroundStyle(.secondary)
+            legalAgreement
             Button {
                 Task {
                     if await auth.signUp(username: signupUsername, email: email, password: password) { mode = .signIn }
@@ -105,6 +121,22 @@ struct SignInView: View {
                 Button("Sign in") { clearMessages(); mode = .signIn }.foregroundStyle(CATheme.accent)
             }.font(.subheadline)
         }
+    }
+
+    private var legalAgreement: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("By signing up, you agree to our")
+            HStack(spacing: 4) {
+                Button("Terms of Service") { showTerms = true }.underline()
+                Text("and")
+                Button("Privacy Policy") { showPrivacy = true }.underline()
+                Text(".")
+            }
+            Text("You must be at least 13 years old, or the minimum age of digital consent in your country.")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var forgotPasswordForm: some View {
@@ -151,6 +183,10 @@ struct SignInView: View {
         Button { auth.signIn(provider: provider) } label: {
             Label(title, systemImage: symbol).frame(maxWidth: .infinity)
         }.buttonStyle(CAWebButtonStyle(variant: .outline)).disabled(auth.isLoading)
+    }
+
+    private func toggleTheme() {
+        appearance = colorScheme == .dark ? "light" : "dark"
     }
 
     private func clearMessages() { auth.error = nil; auth.message = nil }
