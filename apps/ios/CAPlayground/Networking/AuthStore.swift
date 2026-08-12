@@ -101,6 +101,10 @@ private struct AuthResponse: Decodable {
     }
 }
 
+private struct OAuthURLResponse: Decodable {
+    var url: URL
+}
+
 private struct APIErrorBody: Decodable {
     var msg: String?
     var message: String?
@@ -121,8 +125,15 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
     private static let keychainService = "com.nightvibes33.caplayground.auth"
     private static let keychainAccount = "supabase-session"
 
+    private static let oauthCallback = "caplayground://auth/callback"
+    private static let signupCallback = "caplayground://auth/confirm-signup"
+    private static let recoveryCallback = "caplayground://auth/reset-password"
+    private static let emailChangeCallback = "caplayground://auth/email-change"
+    private static let identityLinkCallback = "caplayground://auth/link"
+
     private(set) var user: AuthUser?
     private(set) var username = ""
+    private(set) var linkingProvider: String?
     var isLoading = false
     var message: String?
     var error: String?
@@ -141,8 +152,15 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
 
     var isSignedIn: Bool { user != nil }
 
+    var canChangeEmail: Bool {
+        !(user?.identities ?? []).contains { $0.provider.lowercased() == "google" }
+    }
+
     func signIn(email: String, password: String) async -> Bool {
-        await performAuth(path: "/auth/v1/token?grant_type=password", body: ["email": email, "password": password])
+        await performAuth(
+            path: "/auth/v1/token?grant_type=password",
+            body: ["email": email.trimmingCharacters(in: .whitespacesAndNewlines), "password": password]
+        )
     }
 
     func signUp(username: String, email: String, password: String) async -> Bool {
@@ -150,14 +168,32 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
             error = "Username must be 3-20 chars and only letters, numbers, and ! - _ ."
             return false
         }
+
         isLoading = true
+        message = nil
+        error = nil
         defer { isLoading = false }
+
         do {
-            let body: [String: Any] = ["email": email, "password": password, "data": ["username": username]]
-            let (_, response) = try await request(path: "/auth/v1/signup", method: "POST", body: body)
+            let body: [String: Any] = [
+                "email": email.trimmingCharacters(in: .whitespacesAndNewlines),
+                "password": password,
+                "data": ["username": username]
+            ]
+            let url = try authURL(
+                path: "signup",
+                queryItems: [URLQueryItem(name: "redirect_to", value: Self.signupCallback)]
+            )
+            let (data, response) = try await request(url: url, method: "POST", body: body)
             guard (200..<300).contains(response.statusCode) else { throw lastResponseError }
-            message = "Check your email for a confirmation link."
-            error = nil
+
+            if let authResponse = try? JSONDecoder().decode(AuthResponse.self, from: data) {
+                install(authResponse)
+                await loadUsername()
+                message = "Account created and signed in."
+            } else {
+                message = "Check your email for a confirmation link. It will return directly to CAPlayground."
+            }
             return true
         } catch {
             self.error = error.localizedDescription
@@ -166,32 +202,106 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
     }
 
     func signIn(provider: String) {
+        message = nil
         error = nil
-        var components = URLComponents(url: Self.supabaseURL.appendingPathComponent("auth/v1/authorize"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [
-            URLQueryItem(name: "provider", value: provider),
-            URLQueryItem(name: "redirect_to", value: "caplayground://auth/callback")
-        ]
-        guard let url = components.url else { return }
-        let auth = ASWebAuthenticationSession(url: url, callbackURLScheme: "caplayground") { [weak self] callbackURL, authError in
-            Task { @MainActor in
-                guard let self else { return }
-                self.isLoading = false
-                if let authError {
-                    if (authError as NSError).code != ASWebAuthenticationSessionError.Code.canceledLogin.rawValue {
-                        self.error = authError.localizedDescription
-                    }
-                    return
+
+        do {
+            let url = try authURL(
+                path: "authorize",
+                queryItems: [
+                    URLQueryItem(name: "provider", value: provider),
+                    URLQueryItem(name: "redirect_to", value: Self.oauthCallback)
+                ]
+            )
+            startWebAuthentication(url: url, linkingProvider: nil)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func linkIdentity(provider: String) {
+        guard isSignedIn else {
+            error = "You must be signed in to link an account."
+            return
+        }
+        guard linkingProvider == nil else { return }
+
+        linkingProvider = provider
+        isLoading = true
+        message = nil
+        error = nil
+
+        Task {
+            do {
+                guard let token = await validAccessToken() else {
+                    throw NSError(
+                        domain: "CAPlayground.Auth",
+                        code: 401,
+                        userInfo: [NSLocalizedDescriptionKey: "Your session expired. Please sign in again."]
+                    )
                 }
-                guard let callbackURL else { return }
-                await self.acceptOAuthCallback(callbackURL)
+
+                let url = try authURL(
+                    path: "user/identities/authorize",
+                    queryItems: [
+                        URLQueryItem(name: "provider", value: provider),
+                        URLQueryItem(name: "redirect_to", value: Self.identityLinkCallback),
+                        URLQueryItem(name: "skip_http_redirect", value: "true")
+                    ]
+                )
+                let (data, response) = try await request(url: url, token: token)
+                guard (200..<300).contains(response.statusCode) else { throw lastResponseError }
+
+                let link = try JSONDecoder().decode(OAuthURLResponse.self, from: data)
+                startWebAuthentication(url: link.url, linkingProvider: provider)
+            } catch {
+                linkingProvider = nil
+                isLoading = false
+                self.error = error.localizedDescription
             }
         }
-        auth.presentationContextProvider = self
-        auth.prefersEphemeralWebBrowserSession = false
-        webAuthenticationSession = auth
+    }
+
+    func unlinkIdentity(_ identity: AuthUser.Identity) async -> Bool {
+        let identities = user?.identities ?? []
+        guard identities.count > 1 else {
+            error = "You cannot unlink your only authentication method. Please link another provider first."
+            return false
+        }
+        guard let token = await validAccessToken() else {
+            error = "Your session expired. Please sign in again."
+            return false
+        }
+
         isLoading = true
-        auth.start()
+        message = nil
+        error = nil
+        defer { isLoading = false }
+
+        do {
+            let encodedID = identity.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? identity.id
+            let (data, response) = try await request(
+                path: "/auth/v1/user/identities/\(encodedID)",
+                method: "DELETE",
+                token: token
+            )
+            guard (200..<300).contains(response.statusCode) else { throw lastResponseError }
+
+            if let updated = try? JSONDecoder().decode(AuthUser.self, from: data) {
+                user = updated
+                session?.user = updated
+                saveSession()
+                await loadUsername()
+            } else {
+                await refreshUser()
+            }
+
+            message = "Successfully unlinked \(identity.provider) account"
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
     }
 
     func refreshUser() async {
@@ -225,29 +335,70 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
     }
 
     func updateEmail(_ value: String) async -> Bool {
+        guard canChangeEmail else {
+            error = "Email is managed by your Google account. To change it, update your Google Account email."
+            return false
+        }
+
+        let next = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !next.isEmpty, next.contains("@") else {
+            error = "Please enter a valid email"
+            return false
+        }
         guard let token = await validAccessToken() else { return false }
+
+        isLoading = true
+        message = nil
+        error = nil
+        defer { isLoading = false }
+
         do {
-            let (_, response) = try await request(path: "/auth/v1/user", method: "PUT", body: ["email": value], token: token)
+            let url = try authURL(
+                path: "user",
+                queryItems: [URLQueryItem(name: "redirect_to", value: Self.emailChangeCallback)]
+            )
+            let (_, response) = try await request(
+                url: url,
+                method: "PUT",
+                body: ["email": next],
+                token: token
+            )
             guard (200..<300).contains(response.statusCode) else { throw lastResponseError }
-            message = "Verification email sent to update your email. You'll be signed out now; please sign back in after verifying."
+            message = "Verification email sent to update your email. The verification link will return directly to CAPlayground."
             await signOut()
             return true
-        } catch { self.error = error.localizedDescription; return false }
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
     }
 
     func sendPasswordReset(email: String) async {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            error = "Enter your email address."
+            return
+        }
+
+        isLoading = true
+        message = nil
+        error = nil
+        defer { isLoading = false }
+
         do {
-            let body = ["email": email, "redirect_to": "caplayground://auth/reset-password"]
-            let (_, response) = try await request(path: "/auth/v1/recover", method: "POST", body: body)
+            let url = try authURL(
+                path: "recover",
+                queryItems: [URLQueryItem(name: "redirect_to", value: Self.recoveryCallback)]
+            )
+            let (_, response) = try await request(url: url, method: "POST", body: ["email": trimmed])
             guard (200..<300).contains(response.statusCode) else { throw lastResponseError }
-            message = "If the email exists, a reset link has been sent."
-            error = nil
+            message = "If the email exists, a reset link has been sent. It will return directly to CAPlayground."
         } catch { self.error = error.localizedDescription }
     }
 
     func handleIncomingURL(_ url: URL) async {
-        guard url.scheme == "caplayground" else { return }
-        await acceptOAuthCallback(url)
+        guard url.scheme?.lowercased() == "caplayground" else { return }
+        await acceptAuthCallback(url)
     }
 
     func updatePassword(_ password: String) async -> Bool {
@@ -256,7 +407,12 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
             return false
         }
         do {
-            let (_, response) = try await request(path: "/auth/v1/user", method: "PUT", body: ["password": password], token: token)
+            let (_, response) = try await request(
+                path: "/auth/v1/user",
+                method: "PUT",
+                body: ["password": password],
+                token: token
+            )
             guard (200..<300).contains(response.statusCode) else { throw lastResponseError }
             requiresPasswordReset = false
             message = "Password updated successfully."
@@ -302,6 +458,8 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
         session = nil
         user = nil
         username = ""
+        linkingProvider = nil
+        requiresPasswordReset = false
         deleteSession()
     }
 
@@ -320,6 +478,7 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
             session = nil
             user = nil
             username = ""
+            linkingProvider = nil
             deleteSession()
             return true
         } catch {
@@ -335,8 +494,144 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
 
     private var lastResponseError = NSError(domain: "CAPlayground.Auth", code: 1, userInfo: [NSLocalizedDescriptionKey: "Authentication request failed"])
 
+    private func startWebAuthentication(url: URL, linkingProvider provider: String?) {
+        webAuthenticationSession?.cancel()
+
+        let auth = ASWebAuthenticationSession(url: url, callbackURLScheme: "caplayground") { [weak self] callbackURL, authError in
+            Task { @MainActor in
+                guard let self else { return }
+
+                if let authError {
+                    self.isLoading = false
+                    self.linkingProvider = nil
+                    if (authError as NSError).code != ASWebAuthenticationSessionError.Code.canceledLogin.rawValue {
+                        self.error = authError.localizedDescription
+                    }
+                    return
+                }
+
+                guard let callbackURL else {
+                    self.isLoading = false
+                    self.linkingProvider = nil
+                    self.error = "Authentication did not return to CAPlayground."
+                    return
+                }
+
+                await self.acceptAuthCallback(callbackURL, expectedLinkedProvider: provider)
+            }
+        }
+        auth.presentationContextProvider = self
+        auth.prefersEphemeralWebBrowserSession = false
+        webAuthenticationSession = auth
+        isLoading = true
+
+        guard auth.start() else {
+            isLoading = false
+            linkingProvider = nil
+            error = "Unable to start authentication."
+            return
+        }
+    }
+
+    private func acceptAuthCallback(_ url: URL, expectedLinkedProvider: String? = nil) async {
+        defer {
+            isLoading = false
+            if expectedLinkedProvider != nil || url.host == "link" {
+                linkingProvider = nil
+            }
+        }
+
+        let values = callbackValues(from: url)
+        if let callbackError = values["error_description"] ?? values["error"] {
+            error = callbackError.replacingOccurrences(of: "+", with: " ")
+            return
+        }
+
+        if let access = values["access_token"], let refresh = values["refresh_token"] {
+            let expires = Double(values["expires_in"] ?? "3600") ?? 3600
+            session = AuthSession(
+                accessToken: access,
+                refreshToken: refresh,
+                expiresAt: .now.addingTimeInterval(expires),
+                user: AuthUser(id: "", email: nil)
+            )
+            saveSession()
+            await refreshUser()
+        } else if session != nil {
+            await refreshUser()
+        }
+
+        let callbackType = values["type"]?.lowercased()
+        if callbackType == "recovery" || url.host == "reset-password" {
+            guard session != nil else {
+                error = "Password reset link expired or did not contain a valid session."
+                return
+            }
+            requiresPasswordReset = true
+            message = "Choose a new password."
+            error = nil
+            return
+        }
+
+        if let provider = expectedLinkedProvider ?? (url.host == "link" ? linkingProvider : nil) {
+            await refreshUser()
+            if (user?.identities ?? []).contains(where: { $0.provider.caseInsensitiveCompare(provider) == .orderedSame }) {
+                message = "Successfully linked \(provider) account!"
+                error = nil
+            } else {
+                error = "The \(provider) sign-in finished, but Supabase did not report it as linked."
+            }
+            return
+        }
+
+        if url.host == "confirm-signup" || callbackType == "signup" {
+            message = isSignedIn ? "Email confirmed. You're signed in." : "Email confirmed. You can sign in now."
+            error = nil
+            return
+        }
+
+        if url.host == "email-change" || callbackType == "email_change" {
+            message = "Email change verified."
+            error = nil
+            return
+        }
+
+        guard session != nil else {
+            error = "Sign-in failed or expired."
+            return
+        }
+
+        error = nil
+    }
+
+    private func callbackValues(from url: URL) -> [String: String] {
+        var items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        if let fragment = url.fragment, !fragment.isEmpty,
+           let fragmentItems = URLComponents(string: "?\(fragment)")?.queryItems {
+            items.append(contentsOf: fragmentItems)
+        }
+
+        var values: [String: String] = [:]
+        for item in items {
+            values[item.name] = item.value ?? ""
+        }
+        return values
+    }
+
+    private func authURL(path: String, queryItems: [URLQueryItem] = []) throws -> URL {
+        let base = Self.supabaseURL.appendingPathComponent("auth/v1").appendingPathComponent(path)
+        guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            throw URLError(.badURL)
+        }
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+        guard let url = components.url else { throw URLError(.badURL) }
+        return url
+    }
+
     private func performAuth(path: String, body: [String: Any]) async -> Bool {
         isLoading = true
+        message = nil
+        error = nil
         defer { isLoading = false }
         do {
             let (data, response) = try await request(path: path, method: "POST", body: body)
@@ -344,26 +639,11 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
             let value = try JSONDecoder().decode(AuthResponse.self, from: data)
             install(value)
             await loadUsername()
-            error = nil
             return true
         } catch {
             self.error = error.localizedDescription
             return false
         }
-    }
-
-    private func acceptOAuthCallback(_ url: URL) async {
-        let fragment = URLComponents(string: "?" + (url.fragment ?? ""))?.queryItems ?? []
-        let values = Dictionary(uniqueKeysWithValues: fragment.map { ($0.name, $0.value ?? "") })
-        guard let access = values["access_token"], let refresh = values["refresh_token"] else {
-            error = values["error_description"] ?? "Sign-in failed or expired"
-            return
-        }
-        let expires = Double(values["expires_in"] ?? "3600") ?? 3600
-        session = AuthSession(accessToken: access, refreshToken: refresh, expiresAt: .now.addingTimeInterval(expires), user: AuthUser(id: "", email: nil))
-        saveSession()
-        await refreshUser()
-        requiresPasswordReset = values["type"] == "recovery" || url.host == "reset-password"
     }
 
     private func ensureValidSession() async -> Bool {
@@ -399,22 +679,48 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
         } catch { }
     }
 
-    private func request(path: String, method: String = "GET", body: [String: Any]? = nil, token: String? = nil, additionalHeaders: [String: String] = [:]) async throws -> (Data, HTTPURLResponse) {
+    private func request(
+        path: String,
+        method: String = "GET",
+        body: [String: Any]? = nil,
+        token: String? = nil,
+        additionalHeaders: [String: String] = [:]
+    ) async throws -> (Data, HTTPURLResponse) {
         guard let url = URL(string: path, relativeTo: Self.supabaseURL) else { throw URLError(.badURL) }
+        return try await request(
+            url: url,
+            method: method,
+            body: body,
+            token: token,
+            additionalHeaders: additionalHeaders
+        )
+    }
+
+    private func request(
+        url: URL,
+        method: String = "GET",
+        body: [String: Any]? = nil,
+        token: String? = nil,
+        additionalHeaders: [String: String] = [:]
+    ) async throws -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue(Self.anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("2024-01-01", forHTTPHeaderField: "X-Supabase-Api-Version")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         for (key, value) in additionalHeaders { request.setValue(value, forHTTPHeaderField: key) }
         if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
+
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+
         if !(200..<300).contains(http.statusCode) {
             let api = try? JSONDecoder().decode(APIErrorBody.self, from: data)
             let text = api?.msg ?? api?.message ?? api?.errorDescription ?? api?.error ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
             lastResponseError = NSError(domain: "CAPlayground.Auth", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: text])
         }
+
         return (data, http)
     }
 
