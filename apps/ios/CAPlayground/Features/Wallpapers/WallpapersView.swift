@@ -1,7 +1,9 @@
 import AVKit
 import Foundation
+import SafariServices
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 private struct WallpapersResponse: Codable, Sendable {
     let baseURL: URL
@@ -55,10 +57,30 @@ private struct WallpaperDownloadStat: Codable, Sendable {
     }
 }
 
+private struct TendiesExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.tendies] }
+    static var writableContentTypes: [UTType] { [.tendies] }
+    let data: Data
+
+    init(data: Data) { self.data = data }
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private struct SafariDestination: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
 struct WallpapersView: View {
     @Environment(ProjectStore.self) private var store
     @Environment(AuthStore.self) private var auth
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.openURL) private var openURL
 
     private enum SortOrder: String, CaseIterable {
         case oldest = "Oldest to Newest"
@@ -75,11 +97,20 @@ struct WallpapersView: View {
     @State private var isLoading = true
     @State private var failed = false
     @State private var importingID: String?
+    @State private var downloadingID: String?
     @State private var importedProject: CAProjectDocument?
     @State private var importError: String?
     @State private var showingSubmission = false
+    @State private var exportDocument: TendiesExportDocument?
+    @State private var exportFilename = "wallpaper.tendies"
+    @State private var showingFileExporter = false
+    @State private var copiedWallpaperID: String?
+    @State private var safariDestination: SafariDestination?
 
-    private var cacheDirectory: URL { FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("WallpaperGallery", isDirectory: true) }
+    private var cacheDirectory: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("WallpaperGallery", isDirectory: true)
+    }
 
     private var wallpapers: [WallpaperItem] {
         guard let response else { return [] }
@@ -103,47 +134,61 @@ struct WallpapersView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-          ScrollView {
-            VStack(spacing: 32) {
-                VStack(spacing: 12) {
-                    Text("Wallpaper Gallery")
-                        .font(.system(size: 50, weight: .bold))
-                    Text("Browse wallpapers made by the CAPlayground community.")
-                        .foregroundStyle(.secondary)
-                }
-                .multilineTextAlignment(.center)
+            ScrollView {
+                VStack(spacing: 32) {
+                    VStack(spacing: 12) {
+                        Text("Wallpaper Gallery")
+                            .font(.system(size: 50, weight: .bold))
+                        Text("Browse wallpapers made by the CAPlayground community.")
+                            .foregroundStyle(.secondary)
+                    }
+                    .multilineTextAlignment(.center)
 
-                controls
+                    controls
 
-                if isLoading {
-                    ProgressView("Loading...").frame(minHeight: 260)
-                } else if failed || response == nil {
-                    Text("Unable to load wallpapers right now. Please try again later.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(minHeight: 260)
-                } else {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 28)], spacing: 28) {
-                        ForEach(wallpapers) { item in
-                            wallpaperCard(item)
-                                .onTapGesture { selected = item }
+                    if isLoading {
+                        ProgressView("Loading...").frame(minHeight: 260)
+                    } else if failed || response == nil {
+                        Text("Unable to load wallpapers right now. Please try again later.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(minHeight: 260)
+                    } else {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 28)], spacing: 28) {
+                            ForEach(wallpapers) { item in
+                                wallpaperCard(item)
+                                    .onTapGesture { selected = item }
+                            }
                         }
                     }
                 }
+                .frame(maxWidth: 1120)
+                .padding(.horizontal, 24)
+                .padding(.top, 96).padding(.bottom, 64)
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: 1120)
-            .padding(.horizontal, 24)
-            .padding(.top, 96).padding(.bottom, 64)
-            .frame(maxWidth: .infinity)
-          }
-          CAWebsiteNavigation().padding(.horizontal, 16).padding(.top, 8)
+            CAWebsiteNavigation().padding(.horizontal, 16).padding(.top, 8)
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(item: $selected) { item in detail(item) }
         .fullScreenCover(item: $importedProject) { project in
             EditorView(initialProject: project)
         }
-        .sheet(isPresented: $showingSubmission) { SubmitWallpaperView { Task { await loadWallpapers() } } }
+        .sheet(isPresented: $showingSubmission) {
+            SubmitWallpaperView { Task { await loadWallpapers() } }
+        }
+        .sheet(item: $safariDestination) { destination in
+            SafariView(url: destination.url).ignoresSafeArea()
+        }
+        .fileExporter(
+            isPresented: $showingFileExporter,
+            document: exportDocument,
+            contentType: .tendies,
+            defaultFilename: exportFilename
+        ) { result in
+            if case .failure(let error) = result { importError = error.localizedDescription }
+            exportDocument = nil
+        }
         .alert("Failed to open wallpaper", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("OK") { importError = nil }
         } message: {
@@ -153,12 +198,22 @@ struct WallpapersView: View {
             await loadWallpapers()
             await loadDownloadStats()
         }
+        .onOpenURL { url in
+            handleGalleryDeepLink(url)
+        }
     }
 
     private var controls: some View {
         VStack(spacing: 12) {
-            if auth.isSignedIn { Button { showingSubmission = true } label: { Label("Submit Wallpaper", systemImage: "square.and.arrow.up") }.buttonStyle(CAWebButtonStyle(variant: .accent)) }
-            else { NavigationLink { SignInView() } label: { Label("Submit Wallpaper", systemImage: "square.and.arrow.up") }.buttonStyle(CAWebButtonStyle(variant: .accent)) }
+            if auth.isSignedIn {
+                Button { showingSubmission = true } label: {
+                    Label("Submit Wallpaper", systemImage: "square.and.arrow.up")
+                }.buttonStyle(CAWebButtonStyle(variant: .accent))
+            } else {
+                NavigationLink { SignInView() } label: {
+                    Label("Submit Wallpaper", systemImage: "square.and.arrow.up")
+                }.buttonStyle(CAWebButtonStyle(variant: .accent))
+            }
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { searchField; sortPicker }
@@ -184,8 +239,7 @@ struct WallpapersView: View {
                 }
             }
         } label: {
-            Text(sortOrder.rawValue)
-                .frame(minWidth: 150)
+            Text(sortOrder.rawValue).frame(minWidth: 150)
         }
         .buttonStyle(CAWebButtonStyle(variant: .outline))
     }
@@ -202,16 +256,17 @@ struct WallpapersView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-            Text(item.description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
 
             if let downloads = downloadStats[item.id], downloads > 0 {
                 Label("\(downloads) \(downloads == 1 ? "Download" : "Downloads")", systemImage: "arrow.down.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Text(item.description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
 
             actions(item)
         }
@@ -239,13 +294,22 @@ struct WallpapersView: View {
     private func actions(_ item: WallpaperItem) -> some View {
         VStack(spacing: 8) {
             if let fileURL = fileURL(item) {
-                Link(destination: fileURL) {
-                    Label("Download .tendies", systemImage: "arrow.down.circle")
+                Button {
+                    Task { await downloadTendies(item, fileURL: fileURL) }
+                } label: {
+                    Label(downloadingID == item.id ? "Downloading..." : "Download .tendies", systemImage: "arrow.down.circle")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(CAWebButtonStyle(variant: .accent))
+                .disabled(downloadingID != nil)
 
-                Link(destination: URL(string: "pocketposter://download?url=\(fileURL.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")!) {
+                Button {
+                    Task {
+                        await trackDownload(item)
+                        let encoded = fileURL.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                        if let url = URL(string: "pocketposter://download?url=\(encoded)") { openURL(url) }
+                    }
+                } label: {
                     Label("Open in Pocket Poster", systemImage: "arrow.down.circle")
                         .frame(maxWidth: .infinity)
                 }
@@ -261,7 +325,9 @@ struct WallpapersView: View {
                 .disabled(importingID != nil)
             }
 
-            Link(destination: URL(string: "https://www.youtube.com/watch?v=nSBQIwAaAEc")!) {
+            Button {
+                safariDestination = SafariDestination(url: URL(string: "https://www.youtube.com/watch?v=nSBQIwAaAEc")!)
+            } label: {
                 Label("Watch Tutorial", systemImage: "play.rectangle")
                     .frame(maxWidth: .infinity)
             }
@@ -281,14 +347,24 @@ struct WallpapersView: View {
                         Text("Description").font(.headline)
                         Text(item.description).font(.subheadline).foregroundStyle(.secondary)
                     }
+                    if let downloads = downloadStats[item.id], downloads > 0 {
+                        Label("\(downloads) \(downloads == 1 ? "Download" : "Downloads")", systemImage: "arrow.down.circle")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                     actions(item)
                     Button {
                         UIPasteboard.general.url = URL(string: "https://caplayground.vercel.app/wallpapers?id=\(item.id)")!
+                        copiedWallpaperID = item.id
+                        Task {
+                            try? await Task.sleep(for: .seconds(2))
+                            if copiedWallpaperID == item.id { copiedWallpaperID = nil }
+                        }
                     } label: {
-                        Label("Copy Link", systemImage: "doc.on.doc")
+                        Label(copiedWallpaperID == item.id ? "Copied" : "Copy Link", systemImage: copiedWallpaperID == item.id ? "checkmark" : "doc.on.doc")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(CAWebButtonStyle(variant: .outline))
                 }
                 .padding(24)
             }
@@ -313,7 +389,12 @@ struct WallpapersView: View {
             try? data.write(to: cacheDirectory.appendingPathComponent("wallpapers.json"), options: .atomic)
             failed = false
         } catch {
-            if let data = try? Data(contentsOf: cacheDirectory.appendingPathComponent("wallpapers.json")), let cached = try? JSONDecoder().decode(WallpapersResponse.self, from: data) { response = cached; failed = false } else { failed = true }
+            if let data = try? Data(contentsOf: cacheDirectory.appendingPathComponent("wallpapers.json")), let cached = try? JSONDecoder().decode(WallpapersResponse.self, from: data) {
+                response = cached
+                failed = false
+            } else {
+                failed = true
+            }
         }
         isLoading = false
     }
@@ -328,21 +409,64 @@ struct WallpapersView: View {
         } catch { }
     }
 
+    private func trackDownload(_ item: WallpaperItem) async {
+        guard let url = URL(string: "https://caplayground.vercel.app/api/wallpapers/download") else { return }
+        do {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["wallpaperId": item.id, "name": item.name])
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+                await loadDownloadStats()
+            }
+        } catch { }
+    }
+
+    private func downloadTendies(_ item: WallpaperItem, fileURL: URL) async {
+        downloadingID = item.id
+        defer { downloadingID = nil }
+        await trackDownload(item)
+        do {
+            let data = try await tendiesData(item, fileURL: fileURL)
+            exportDocument = TendiesExportDocument(data: data)
+            exportFilename = safeFilename(item.name) + ".tendies"
+            showingFileExporter = true
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
     private func openInEditor(_ item: WallpaperItem, fileURL: URL) async {
         importingID = item.id
         defer { importingID = nil }
+        await trackDownload(item)
         do {
-            let (data, response) = try await URLSession.shared.data(from: fileURL)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-            try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-            try? data.write(to: cacheDirectory.appendingPathComponent("\(item.id).tendies"), options: .atomic)
+            let data = try await tendiesData(item, fileURL: fileURL)
             let project = try CAArchiveImporter.importProject(data: data, suggestedName: item.name)
             store.update(project)
             selected = nil
             importedProject = project
         } catch {
-            if let data = try? Data(contentsOf: cacheDirectory.appendingPathComponent("\(item.id).tendies")), let project = try? CAArchiveImporter.importProject(data: data, suggestedName: item.name) { store.update(project); selected = nil; importedProject = project } else { importError = error.localizedDescription }
+            importError = error.localizedDescription
         }
+    }
+
+    private func tendiesData(_ item: WallpaperItem, fileURL: URL) async throws -> Data {
+        try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        do {
+            let (data, response) = try await URLSession.shared.data(from: fileURL)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            try? data.write(to: cachedTendiesURL(item), options: .atomic)
+            return data
+        } catch {
+            if let cached = try? Data(contentsOf: cachedTendiesURL(item)) { return cached }
+            throw error
+        }
+    }
+
+    private func cachedTendiesURL(_ item: WallpaperItem) -> URL {
+        cacheDirectory.appendingPathComponent("\(item.id).tendies")
     }
 
     private func previewURL(_ item: WallpaperItem) -> URL? {
@@ -355,6 +479,24 @@ struct WallpapersView: View {
 
     private func isVideo(_ url: URL) -> Bool {
         ["mp4", "mov"].contains(url.pathExtension.lowercased()) || url.path.lowercased().contains("/video/")
+    }
+
+    private func safeFilename(_ value: String) -> String {
+        value.replacingOccurrences(of: #"[\\/:*?\"<>|]"#, with: "_", options: .regularExpression)
+    }
+
+    private func handleGalleryDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "caplayground", url.host == "wallpapers" else { return }
+        let values = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let id = values.first(where: { $0.name == "id" })?.value
+        let action = values.first(where: { $0.name == "action" })?.value
+        if let q = values.first(where: { $0.name == "q" })?.value { query = q }
+        guard let id, let item = response?.wallpapers.first(where: { $0.id == id }) else { return }
+        if action == "edit", let fileURL = fileURL(item) {
+            Task { await openInEditor(item, fileURL: fileURL) }
+        } else {
+            selected = item
+        }
     }
 }
 
@@ -380,4 +522,10 @@ private struct WallpaperVideoPreview: View {
                 player.play()
             }
     }
+}
+
+private struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) { }
 }
