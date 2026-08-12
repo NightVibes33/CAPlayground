@@ -235,9 +235,19 @@ final class CoreAnimationRenderer {
     }
 
     private func applyAnimations(_ models: [KeyframeAnimationModel], to layer: CALayer) {
-        for model in models where model.enabled && !model.numericValues.isEmpty {
+        for model in models where model.enabled && !(model.values ?? model.numericValues.map(AnimationValue.number)).isEmpty {
             let animation = CAKeyframeAnimation(keyPath: model.keyPath)
-            animation.values = model.numericValues
+            animation.values = (model.values ?? model.numericValues.map(AnimationValue.number)).compactMap { value in
+                switch value {
+                case .number(let number):
+                    let converted = model.keyPath.hasPrefix("transform.rotation") ? number * .pi / 180 : number
+                    return NSNumber(value: converted)
+                case .point(let point): return NSValue(cgPoint: CGPoint(x: CGFloat(point.x), y: CGFloat(point.y)))
+                case .size(let size): return NSValue(cgRect: CGRect(x: 0, y: 0, width: CGFloat(size.width), height: CGFloat(size.height)))
+                case .color(let hex): return UIColor(caHex: hex)?.cgColor
+                case .colors(let stops): return stops.compactMap { UIColor(caHex: $0.color)?.withAlphaComponent(CGFloat($0.opacity)).cgColor }
+                }
+            }
             animation.keyTimes = model.keyTimes.map(NSNumber.init(value:))
             animation.duration = model.duration
             animation.speed = Float(model.speed)
