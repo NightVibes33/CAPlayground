@@ -136,16 +136,13 @@ enum CAMLSerializer {
             if model.backgroundOpacity < 1 {
                 children += "\n\(pad)  <backgroundColor value=\"\(encoded)\" opacity=\"\(number(model.backgroundOpacity))\"/>"
             } else {
-                // Kept as a child because the website parser accepts both attribute and child forms.
                 children += "\n\(pad)  <backgroundColor value=\"\(encoded)\"/>"
             }
         }
         if let blend = model.blendMode, blend != "normal", !blend.isEmpty {
             children += "\n\(pad)  <compositingFilter type=\"CAFilter\" filter=\"\(escape(blend))\" name=\"\(escape(blend))\"/>"
         }
-        if !model.filters.isEmpty, model.kind != .liquidGlass {
-            children += filters(model.filters, indent: indent + 1)
-        }
+        if !model.filters.isEmpty, model.kind != .liquidGlass { children += filters(model.filters, indent: indent + 1) }
         if model.kind == .text {
             children += "\n\(pad)  <font type=\"string\" value=\"\(escape(model.fontFamily ?? "SFProText-Regular"))\"/>"
             children += "\n\(pad)  <string type=\"string\" value=\"\(escape(model.text ?? ""))\"/>"
@@ -156,39 +153,23 @@ enum CAMLSerializer {
         if model.kind == .video, !(model.syncWithState ?? false), let prefix = model.framePrefix {
             let count = model.frameCount ?? 0
             let ext = normalizedExtension(model.frameExtension)
-            if count > 0 {
-                children += "\n\(pad)  <contents type=\"CGImage\" src=\"assets/\(escape(prefix))0\(escape(ext))\"/>"
-            }
+            if count > 0 { children += "\n\(pad)  <contents type=\"CGImage\" src=\"assets/\(escape(prefix))0\(escape(ext))\"/>" }
             if count > 1 {
-                let frames = (0..<count).map {
-                    "\n\(pad)        <CGImage src=\"assets/\(escape(prefix))\($0)\(escape(ext))\"/>"
-                }.joined()
+                let frames = (0..<count).map { "\n\(pad)        <CGImage src=\"assets/\(escape(prefix))\($0)\(escape(ext))\"/>" }.joined()
                 children += "\n\(pad)  <animations>\n\(pad)    <animation type=\"CAKeyframeAnimation\" calculationMode=\"\(escape(model.calculationMode ?? "linear"))\" keyPath=\"contents\" beginTime=\"1e-100\" duration=\"\(number(model.videoDuration ?? (Double(count) / max(model.framesPerSecond ?? 30, 1))))\" removedOnCompletion=\"0\" repeatCount=\"inf\" repeatDuration=\"0\" speed=\"1\" timeOffset=\"0\" autoreverses=\"\((model.autoReverses ?? false) ? "1" : "0")\">\n\(pad)      <values>\(frames)\n\(pad)      </values>\n\(pad)    </animation>\n\(pad)  </animations>"
             }
         }
         if model.kind == .gradient, let stops = model.gradientStops {
-            children += "\n\(pad)  <colors>" + stops.map {
-                "\n\(pad)    <CGColor value=\"\(color($0.color) ?? "1 1 1")\" opacity=\"\(number($0.opacity))\"/>"
-            }.joined() + "\n\(pad)  </colors>"
+            children += "\n\(pad)  <colors>" + stops.map { "\n\(pad)    <CGColor value=\"\(color($0.color) ?? "1 1 1")\" opacity=\"\(number($0.opacity))\"/>" }.joined() + "\n\(pad)  </colors>"
             children += "\n\(pad)  <type value=\"\(escape(model.gradientType ?? "axial"))\"/>"
         }
-        if model.kind == .liquidGlass {
-            children += liquidGlass(model, indent: indent + 1)
-        }
+        if model.kind == .liquidGlass { children += liquidGlass(model, indent: indent + 1) }
         if !model.animations.isEmpty { children += animations(model.animations, indent: indent + 1) }
-        if !model.children.isEmpty {
-            children += "\n\(pad)  <sublayers>" + model.children.map { "\n" + layer($0, indent: indent + 2) }.joined() + "\n\(pad)  </sublayers>"
-        }
-        if model.kind == .emitter, let cells = model.emitterCells, !cells.isEmpty {
-            children += emitterCells(cells, indent: indent + 1)
-        }
-        if let gyro = model.gyroDictionaries, !gyro.isEmpty {
-            children += style(gyro, indent: indent + 1)
-        }
+        if !model.children.isEmpty { children += "\n\(pad)  <sublayers>" + model.children.map { "\n" + layer($0, indent: indent + 2) }.joined() + "\n\(pad)  </sublayers>" }
+        if model.kind == .emitter, let cells = model.emitterCells, !cells.isEmpty { children += emitterCells(cells, indent: indent + 1) }
+        if let gyro = model.gyroDictionaries, !gyro.isEmpty { children += style(gyro, indent: indent + 1) }
 
-        return children.isEmpty
-            ? "\(pad)<\(tag)\(attrs)/>"
-            : "\(pad)<\(tag)\(attrs)>\(children)\n\(pad)</\(tag)>"
+        return children.isEmpty ? "\(pad)<\(tag)\(attrs)/>" : "\(pad)<\(tag)\(attrs)>\(children)\n\(pad)</\(tag)>"
     }
 
     private static func filters(_ filters: [FilterModel], indent: Int) -> String {
@@ -196,16 +177,11 @@ enum CAMLSerializer {
         let items = filters.map { filter -> String in
             let enabled = filter.enabled ? "true" : "false"
             switch filter.type {
-            case "gaussianBlur":
-                return "\n\(pad)  <CAFilter filter=\"gaussianBlur\" name=\"gaussianBlur\" enabled=\"\(enabled)\" inputRadius=\"\(number(filter.value))\"/>"
-            case "colorContrast", "colorSaturate":
-                return "\n\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(filter.type))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
-            case "colorHueRotate":
-                return "\n\(pad)  <CAFilter filter=\"colorHueRotate\" name=\"colorHueRotate\" enabled=\"\(enabled)\" inputAngle=\"\(number(filter.value * .pi / 180))\"/>"
-            case "CISepiaTone":
-                return "\n\(pad)  <CIFilter filter=\"CISepiaTone\" name=\"CISepiaTone\" enabled=\"\(enabled)\"><inputIntensity type=\"real\" value=\"\(number(filter.value))\"/></CIFilter>"
-            default:
-                return "\n\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(filter.type))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
+            case "gaussianBlur": return "\n\(pad)  <CAFilter filter=\"gaussianBlur\" name=\"gaussianBlur\" enabled=\"\(enabled)\" inputRadius=\"\(number(filter.value))\"/>"
+            case "colorContrast", "colorSaturate": return "\n\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(filter.type))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
+            case "colorHueRotate": return "\n\(pad)  <CAFilter filter=\"colorHueRotate\" name=\"colorHueRotate\" enabled=\"\(enabled)\" inputAngle=\"\(number(filter.value * .pi / 180))\"/>"
+            case "CISepiaTone": return "\n\(pad)  <CIFilter filter=\"CISepiaTone\" name=\"CISepiaTone\" enabled=\"\(enabled)\"><inputIntensity type=\"real\" value=\"\(number(filter.value))\"/></CIFilter>"
+            default: return "\n\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(filter.type))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
             }
         }.joined()
         return "\n\(pad)<filters>\(items)\n\(pad)</filters>"
@@ -220,9 +196,7 @@ enum CAMLSerializer {
             let values = animation.values ?? animation.numericValues.map(AnimationValue.number)
             let times = animation.keyTimes.map { "\n\(pad)      <real value=\"\(number($0))\"/>" }.joined()
             let encodedValues = values.map { animationValue($0, keyPath: animation.keyPath, indent: indent + 3) }.joined()
-            let repeatAttrs = animation.repeats
-                ? " repeatCount=\"inf\" repeatDuration=\"inf\""
-                : " repeatDuration=\"\(number(animation.repeatDurationSeconds ?? animation.duration))\""
+            let repeatAttrs = animation.repeats ? " repeatCount=\"inf\" repeatDuration=\"inf\"" : " repeatDuration=\"\(number(animation.repeatDurationSeconds ?? animation.duration))\""
             return "\n\(pad)  <\(tag) type=\"CAKeyframeAnimation\" keyPath=\"\(escape(animation.keyPath))\" duration=\"\(number(animation.duration))\" speed=\"\(number(animation.speed))\" removedOnCompletion=\"0\"\(repeatAttrs) autoreverses=\"\(animation.autoreverses ? "1" : "0")\" calculationMode=\"\(escape(animation.calculationMode))\" timingFunction=\"\(escape(animation.timingFunction))\">\n\(pad)    <keyTimes>\(times)\n\(pad)    </keyTimes>\n\(pad)    <values>\(encodedValues)\n\(pad)    </values>\n\(pad)  </\(tag)>"
         }.joined() + "\n\(pad)</animations>"
     }
@@ -234,16 +208,11 @@ enum CAMLSerializer {
             let converted = keyPath.hasPrefix("transform.rotation") ? raw * .pi / 180 : raw
             let tag = keyPath == "position.x" || keyPath == "position.y" ? "integer" : "real"
             return "\n\(pad)<\(tag) value=\"\(number(tag == "integer" ? converted.rounded() : converted))\"/>"
-        case .point(let point):
-            return "\n\(pad)<CGPoint value=\"\(number(point.x.rounded())) \(number(point.y.rounded()))\"/>"
-        case .size(let size):
-            return "\n\(pad)<CGRect value=\"0 0 \(number(size.width.rounded())) \(number(size.height.rounded()))\"/>"
-        case .color(let hex):
-            return "\n\(pad)<CGColor value=\"\(color(hex) ?? "1 1 1")\"/>"
+        case .point(let point): return "\n\(pad)<CGPoint value=\"\(number(point.x.rounded())) \(number(point.y.rounded()))\"/>"
+        case .size(let size): return "\n\(pad)<CGRect value=\"0 0 \(number(size.width.rounded())) \(number(size.height.rounded()))\"/>"
+        case .color(let hex): return "\n\(pad)<CGColor value=\"\(color(hex) ?? "1 1 1")\"/>"
         case .colors(let stops):
-            let colors = stops.map { stop in
-                "\n\(pad)  <CGColor value=\"\(color(stop.color) ?? "1 1 1")\" opacity=\"\(number(stop.opacity))\"/>"
-            }.joined()
+            let colors = stops.map { stop in "\n\(pad)  <CGColor value=\"\(color(stop.color) ?? "1 1 1")\" opacity=\"\(number(stop.opacity))\"/>" }.joined()
             return "\n\(pad)<NSArray>\(colors)\n\(pad)</NSArray>"
         }
     }
@@ -254,10 +223,8 @@ enum CAMLSerializer {
             let overrides = document.stateOverrides[name] ?? []
             let elements = overrides.map { value in
                 let encoded: (String, String) = switch value.value {
-                case .number(let valueNumber):
-                    (valueNumber.rounded() == valueNumber ? "integer" : "real", number(value.keyPath.hasPrefix("transform.rotation") ? valueNumber * .pi / 180 : valueNumber))
-                case .string(let string):
-                    (value.keyPath == "backgroundColor" ? "CGColor" : "string", value.keyPath == "backgroundColor" ? (color(string) ?? "1 1 1") : string)
+                case .number(let valueNumber): (valueNumber.rounded() == valueNumber ? "integer" : "real", number(value.keyPath.hasPrefix("transform.rotation") ? valueNumber * .pi / 180 : valueNumber))
+                case .string(let string): (value.keyPath == "backgroundColor" ? "CGColor" : "string", value.keyPath == "backgroundColor" ? (color(string) ?? "1 1 1") : string)
                 }
                 return "        <LKStateSetValue targetId=\"\(value.targetID.uuidString)\" keyPath=\"\(escape(value.keyPath))\"><value type=\"\(encoded.0)\" value=\"\(escape(encoded.1))\"/></LKStateSetValue>"
             }.joined(separator: "\n")
@@ -265,9 +232,7 @@ enum CAMLSerializer {
         }.joined(separator: "\n")
         let transitionXML = document.stateTransitions.map { transition in
             let elements = transition.elements.map { element in
-                guard let spring = element.animation else {
-                    return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"/>"
-                }
+                guard let spring = element.animation else { return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"/>" }
                 var attrs = "type=\"\(escape(spring.type))\" damping=\"\(number(spring.damping))\" mass=\"\(number(spring.mass))\" stiffness=\"\(number(spring.stiffness))\" velocity=\"\(number(spring.initialVelocity))\""
                 if let duration = spring.duration { attrs += " duration=\"\(number(duration))\"" }
                 if let fillMode = spring.fillMode { attrs += " fillMode=\"\(escape(fillMode))\"" }
@@ -283,21 +248,24 @@ enum CAMLSerializer {
     private static func emitterCells(_ cells: [EmitterCellModel], indent: Int) -> String {
         let pad = String(repeating: "  ", count: indent)
         let items = cells.map { cell -> String in
-            var attrs: [(String, String?)] = [
-                ("name", cell.name), ("birthRate", number(cell.birthRate)), ("lifetime", number(cell.lifetime)),
-                ("lifetimeRange", number(cell.lifetimeRange)), ("velocity", number(cell.velocity)), ("velocityRange", number(cell.velocityRange)),
+            let attrs: [(String, String?)] = [
+                ("name", cell.name), ("contentsScale", number(cell.contentsScale)),
+                ("birthRate", number(cell.birthRate)), ("lifetime", number(cell.lifetime)), ("lifetimeRange", number(cell.lifetimeRange)),
+                ("velocity", number(cell.velocity)), ("velocityRange", number(cell.velocityRange)),
                 ("emissionLongitude", number(cell.emissionLongitude)), ("emissionLatitude", number(cell.emissionLatitude)), ("emissionRange", number(cell.emissionRange)),
                 ("scale", number(cell.scale)), ("scaleRange", number(cell.scaleRange)), ("scaleSpeed", number(cell.scaleSpeed)),
-                ("alphaRange", number(cell.alphaRange)), ("alphaSpeed", number(cell.alphaSpeed)), ("spin", number(cell.spin)), ("spinRange", number(cell.spinRange)),
-                ("xAcceleration", number(cell.xAcceleration)), ("yAcceleration", number(cell.yAcceleration))
+                ("alpha", number(cell.alpha)), ("alphaRange", number(cell.alphaRange)), ("alphaSpeed", number(cell.alphaSpeed)),
+                ("spin", number(cell.spin)), ("spinRange", number(cell.spinRange)),
+                ("xAcceleration", number(cell.xAcceleration)), ("yAcceleration", number(cell.yAcceleration)),
+                ("redRange", number(cell.redRange)), ("redSpeed", number(cell.redSpeed)),
+                ("greenRange", number(cell.greenRange)), ("greenSpeed", number(cell.greenSpeed)),
+                ("blueRange", number(cell.blueRange)), ("blueSpeed", number(cell.blueSpeed))
             ]
             let attrString = attrs.compactMap { key, value in value.map { " \(key)=\"\(escape($0))\"" } }.joined()
             var children = ""
             if let name = cell.imageName { children += "<contents><CGImage src=\"assets/\(escape(name))\"/></contents>" }
             if let encoded = color(cell.color) { children += "<color><CGColor value=\"\(encoded)\"/></color>" }
-            return children.isEmpty
-                ? "\n\(pad)  <CAEmitterCell\(attrString)/>"
-                : "\n\(pad)  <CAEmitterCell\(attrString)>\(children)</CAEmitterCell>"
+            return children.isEmpty ? "\n\(pad)  <CAEmitterCell\(attrString)/>" : "\n\(pad)  <CAEmitterCell\(attrString)>\(children)</CAEmitterCell>"
         }.joined()
         return "\n\(pad)<emitterCells>\(items)\n\(pad)</emitterCells>"
     }
@@ -339,44 +307,19 @@ enum CAMLSerializer {
     }
 
     private static func number(_ value: Double) -> String {
-        value.rounded() == value
-            ? String(Int(value))
-            : String(format: "%.5f", value)
-                .replacingOccurrences(of: #"0+$"#, with: "", options: .regularExpression)
-                .replacingOccurrences(of: #"\.$"#, with: "", options: .regularExpression)
+        value.rounded() == value ? String(Int(value)) : String(format: "%.5f", value).replacingOccurrences(of: #"0+$"#, with: "", options: .regularExpression).replacingOccurrences(of: #"\.$"#, with: "", options: .regularExpression)
     }
 
     private static func escape(_ value: String) -> String {
-        value.replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
+        value.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
     }
-
-    private static func escapeComment(_ value: String) -> String {
-        value.replacingOccurrences(of: "--", with: "—")
-    }
-
-    private static func gravity(_ fit: String?) -> String {
-        switch fit {
-        case "contain": return "resizeAspect"
-        case "cover": return "resizeAspectFill"
-        case "none": return "center"
-        default: return "resize"
-        }
-    }
-
+    private static func escapeComment(_ value: String) -> String { value.replacingOccurrences(of: "--", with: "—") }
+    private static func gravity(_ fit: String?) -> String { switch fit { case "contain": return "resizeAspect"; case "cover": return "resizeAspectFill"; case "none": return "center"; default: return "resize" } }
     private static func instanceTransform(_ model: LayerModel) -> String? {
         var parts: [String] = []
-        if (model.instanceTranslationX ?? 0) != 0 || (model.instanceTranslationY ?? 0) != 0 || (model.instanceTranslationZ ?? 0) != 0 {
-            parts.append("translate(\(number(model.instanceTranslationX ?? 0)), \(number(model.instanceTranslationY ?? 0)), \(number(model.instanceTranslationZ ?? 0)))")
-        }
+        if (model.instanceTranslationX ?? 0) != 0 || (model.instanceTranslationY ?? 0) != 0 || (model.instanceTranslationZ ?? 0) != 0 { parts.append("translate(\(number(model.instanceTranslationX ?? 0)), \(number(model.instanceTranslationY ?? 0)), \(number(model.instanceTranslationZ ?? 0)))") }
         if (model.instanceRotation ?? 0) != 0 { parts.append("rotate(\(number(model.instanceRotation ?? 0))deg)") }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
-
-    private static func normalizedExtension(_ value: String?) -> String {
-        let raw = value ?? ".jpg"
-        return raw.hasPrefix(".") ? raw : ".\(raw)"
-    }
+    private static func normalizedExtension(_ value: String?) -> String { let raw = value ?? ".jpg"; return raw.hasPrefix(".") ? raw : ".\(raw)" }
 }
