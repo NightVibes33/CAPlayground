@@ -18,38 +18,31 @@ struct LayerPanel: View {
             }
             .padding(12)
             Divider()
-            List(selection: $selectedID) {
-                OutlineGroup(project.root.children.reversed(), children: \.outlineChildren) { layer in
-                    HStack(spacing: 6) {
-                        Text(layer.name)
-                        Text("(\(layer.kind == .shape ? "basic" : layer.kind.rawValue))").foregroundStyle(.secondary)
-                        Spacer()
-                        Button { project.root.update(id: layer.id) { $0.isVisible.toggle() } } label: { Image(systemName: layer.isVisible ? "eye" : "eye.slash") }
-                            .buttonStyle(.plain)
-                    }
-                        .tag(layer.id)
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedID = layer.id }
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(project.root.children.reversed().flatMap { $0.flattenedWithDepth() }, id: \.layer.id) { item in
+                        let layer = item.layer
+                        HStack(spacing: 6) {
+                            if !layer.children.isEmpty { Image(systemName: "chevron.down").font(.system(size: 11)).foregroundStyle(.secondary) }
+                            Image(systemName: layer.kind.symbol).font(.system(size: 13)).foregroundStyle(.secondary)
+                            Text(layer.name).lineLimit(1)
+                            Text("(\(layer.kind == .shape ? "basic" : layer.kind.rawValue))").foregroundStyle(.secondary).font(.caption)
+                            Spacer()
+                            Button { project.root.update(id: layer.id) { $0.isVisible.toggle() } } label: { Image(systemName: layer.isVisible ? "eye" : "eye.slash").frame(width: 28, height: 28) }.buttonStyle(.plain)
+                        }
+                        .font(.system(size: 14)).padding(.leading, CGFloat(8 + item.depth * 16)).padding(.trailing, 8).frame(height: 40)
+                        .background(selectedID == layer.id ? CATheme.accent.opacity(0.30) : .clear)
+                        .contentShape(Rectangle()).onTapGesture { selectedID = layer.id }
                         .contextMenu {
                             Button("Bring to Front") { project.root.reorder(id: layer.id, action: .front) }
                             Button("Bring Forward") { project.root.reorder(id: layer.id, action: .forward) }
                             Button("Send Backward") { project.root.reorder(id: layer.id, action: .backward) }
                             Button("Send to Back") { project.root.reorder(id: layer.id, action: .back) }
-                            Divider()
-                            Button("Rename…") { beginRename(layer) }
-                            Button("Duplicate") {
-                                if let newID = project.root.duplicate(id: layer.id) { selectedID = newID }
-                            }
-                            if !isProtected(layer) {
-                                Button("Delete", role: .destructive) {
-                                    project.root.remove(id: layer.id)
-                                    if selectedID == layer.id { selectedID = nil }
-                                }
-                            }
+                            Divider(); Button("Rename…") { beginRename(layer) }; Button("Duplicate") { if let newID = project.root.duplicate(id: layer.id) { selectedID = newID } }
+                            if !isProtected(layer) { Button("Delete", role: .destructive) { project.root.remove(id: layer.id); if selectedID == layer.id { selectedID = nil } } }
                         }
                 }
             }
-            .listStyle(.plain)
         }
         .caPanel()
         .sheet(isPresented: $renameOpen) {
@@ -220,6 +213,7 @@ enum LayerReorderAction { case front, forward, backward, back }
 
 extension LayerModel {
     func flattened() -> [LayerModel] { [self] + children.flatMap { $0.flattened() } }
+    func flattenedWithDepth(_ depth: Int = 0) -> [(layer: LayerModel, depth: Int)] { [(self, depth)] + children.reversed().flatMap { $0.flattenedWithDepth(depth + 1) } }
     mutating func duplicate(id: UUID) -> UUID? {
         if let index = children.firstIndex(where: { $0.id == id }) {
             var copy = children[index]
