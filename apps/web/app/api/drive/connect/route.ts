@@ -9,6 +9,8 @@ export async function GET(request: NextRequest) {
     const origin = `${url.protocol}//${url.host}`;
 
     const redirectUri = `${origin}/api/drive/callback`;
+    const native = url.searchParams.get('native') === '1';
+    const nativeState = url.searchParams.get('state');
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       redirect_uri: redirectUri,
@@ -20,7 +22,13 @@ export async function GET(request: NextRequest) {
       access_type: 'offline',
       prompt: 'consent'
     });
+    if (native) {
+      if (!nativeState) return NextResponse.json({ error: 'Missing native state' }, { status: 400 });
+      params.set('state', `native:${nativeState}`);
+    }
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+    if (native) return NextResponse.redirect(authUrl);
 
     return NextResponse.json({ authUrl });
 
@@ -32,4 +40,3 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
