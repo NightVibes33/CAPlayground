@@ -209,6 +209,8 @@ struct KeyframeAnimationModel: Codable, Hashable, Identifiable {
     var repeats = true
     var calculationMode = "linear"
     var timingFunction = "linear"
+    var repeatDurationSeconds: Double?
+    var speed = 1.0
 }
 
 struct LayerModel: Codable, Identifiable, Hashable {
@@ -263,6 +265,8 @@ struct LayerModel: Codable, Identifiable, Hashable {
     var calculationMode: String?
     var autoReverses: Bool?
     var syncWithState: Bool?
+    var currentFrameIndex: Int?
+    var syncStateFrameMode: [String: String]?
     var emitterPosition: Vector2?
     var emitterSize: LayerSize?
     var emitterShape: String?
@@ -334,9 +338,12 @@ struct StateTransitionElement: Codable, Hashable {
 }
 
 struct SpringAnimationModel: Codable, Hashable {
+    var type = "CASpringAnimation"
     var damping: Double = 10
     var mass: Double = 1
     var stiffness: Double = 100
     var initialVelocity: Double = 0
     var duration: Double?
+    var fillMode: String?
+    var keyPath: String?
 }
