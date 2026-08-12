@@ -4,11 +4,13 @@ enum CAExportFormat: String, CaseIterable, Identifiable { case ca, tendies; var 
 enum CAExportLicense: String, CaseIterable, Identifiable { case none, attribution = "cc-by-4.0", shareAlike = "cc-by-sa-4.0", nonCommercial = "cc-by-nc-4.0"; var id: String { rawValue } }
 
 enum CAArchiveExporter {
-    private static let indexXML = """<?xml version="1.0" encoding="UTF-8"?>
+    private static let indexXML = """
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>rootDocument</key><string>main.caml</string></dict></plist>
 """
-    private static let manifest = """<?xml version="1.0" encoding="UTF-8"?>
+    private static let manifest = """
+<?xml version="1.0" encoding="UTF-8"?>
 <caml xmlns="http://www.apple.com/CoreAnimation/1.0"><MicaAssetManifest><modules type="NSArray"/></MicaAssetManifest></caml>
 """
 
