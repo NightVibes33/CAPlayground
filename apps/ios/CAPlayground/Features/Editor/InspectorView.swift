@@ -212,18 +212,8 @@ struct InspectorView: View {
     }
 
     @ViewBuilder private func animations(_ layer: LayerModel) -> some View {
-        Menu("Add animation") { ForEach(["position", "position.x", "position.y", "transform.rotation.x", "transform.rotation.y", "transform.rotation.z", "opacity", "bounds", "colors", "backgroundColor"], id: \.self) { key in Button(key) { update { $0.animations.append(.init(keyPath: key, numericValues: [0, 1], keyTimes: [0, 1], duration: 1)) } } } }
-        ForEach(layer.animations) { animation in
-            DisclosureGroup(animation.keyPath) {
-                Toggle("Enabled", isOn: animationBinding(animation.id, \.enabled, animation.enabled)); animationField("Duration (s)", animation.id, \.duration, animation.duration); animationField("Speed", animation.id, \.speed, animation.speed); optionalAnimationField("Repeat Duration (s)", animation.id, \.repeatDurationSeconds, animation.repeatDurationSeconds ?? 0)
-                TextField(animationValuePrompt(animation.keyPath), text: animationValuesBinding(animation)).textFieldStyle(.roundedBorder); TextField("Key Times (comma separated)", text: numericArrayBinding(animation.id, \.keyTimes, animation.keyTimes)).textFieldStyle(.roundedBorder)
-                Toggle("Loop", isOn: animationBinding(animation.id, \.repeats, animation.repeats)); Toggle("Autoreverse", isOn: animationBinding(animation.id, \.autoreverses, animation.autoreverses))
-                Picker("Calculation Mode", selection: animationBinding(animation.id, \.calculationMode, animation.calculationMode)) { Text("Linear").tag("linear"); Text("Discrete").tag("discrete") }
-                Picker("Timing Function", selection: animationBinding(animation.id, \.timingFunction, animation.timingFunction)) { Text("Linear").tag("linear"); Text("Ease In").tag("easeIn"); Text("Ease Out").tag("easeOut"); Text("Ease In-Out").tag("easeInEaseOut") }
-                Button("Delete Animation", role: .destructive) { update { $0.animations.removeAll { $0.id == animation.id } } }
-            }.padding(10).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
-        }
-    }
+    AnimationInspectorPanel(project: $project, selectedID: $selectedID)
+}
 
     @ViewBuilder private func gyro(_ layer: LayerModel) -> some View {
         Text("Configure how this layer responds to device tilt. You can add up to 10 dictionaries.").font(.caption).foregroundStyle(.secondary)
