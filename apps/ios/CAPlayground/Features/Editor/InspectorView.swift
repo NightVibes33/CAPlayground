@@ -181,14 +181,14 @@ struct InspectorView: View {
     }
 
     @ViewBuilder private func animations(_ layer: LayerModel) -> some View {
-        Menu("Add animation") { ForEach(["position", "position.x", "position.y", "transform.rotation.x", "transform.rotation.y", "transform.rotation.z", "opacity", "bounds", "backgroundColor"], id: \.self) { key in Button(key) { update { $0.animations.append(.init(keyPath: key, numericValues: [0, 1], keyTimes: [0, 1], duration: 1)) } } } }
+        Menu("Add animation") { ForEach(["position", "position.x", "position.y", "transform.rotation.x", "transform.rotation.y", "transform.rotation.z", "opacity", "bounds", "colors", "backgroundColor"], id: \.self) { key in Button(key) { update { $0.animations.append(.init(keyPath: key, numericValues: [0, 1], keyTimes: [0, 1], duration: 1)) } } } }
         ForEach(layer.animations) { animation in
             DisclosureGroup(animation.keyPath) {
                 Toggle("Enabled", isOn: animationBinding(animation.id, \.enabled, animation.enabled))
                 animationField("Duration (s)", animation.id, \.duration, animation.duration)
                 animationField("Speed", animation.id, \.speed, animation.speed)
                 optionalAnimationField("Repeat Duration (s)", animation.id, \.repeatDurationSeconds, animation.repeatDurationSeconds ?? 0)
-                TextField("Values (comma separated)", text: numericArrayBinding(animation.id, \.numericValues, animation.numericValues)).textFieldStyle(.roundedBorder)
+                TextField(animationValuePrompt(animation.keyPath), text: animationValuesBinding(animation)).textFieldStyle(.roundedBorder)
                 TextField("Key Times (comma separated)", text: numericArrayBinding(animation.id, \.keyTimes, animation.keyTimes)).textFieldStyle(.roundedBorder)
                 Toggle("Loop", isOn: animationBinding(animation.id, \.repeats, animation.repeats))
                 Toggle("Autoreverse", isOn: animationBinding(animation.id, \.autoreverses, animation.autoreverses))
@@ -300,6 +300,29 @@ struct InspectorView: View {
     private func animationField(_ title: String, _ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, Double>, _ fallback: Double) -> some View { LabeledContent(title) { TextField(title, value: animationBinding(id, keyPath, fallback), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
     private func optionalAnimationField(_ title: String, _ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, Double?>, _ fallback: Double) -> some View { LabeledContent(title) { TextField(title, value: Binding(get: { selected?.animations.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { value in update { layer in if let index = layer.animations.firstIndex(where: { $0.id == id }) { layer.animations[index][keyPath: keyPath] = value } } }), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
     private func numericArrayBinding(_ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, [Double]>, _ fallback: [Double]) -> Binding<String> { Binding(get: { (selected?.animations.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback).map { $0.formatted() }.joined(separator: ", ") }, set: { text in let values = text.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }; update { layer in if let index = layer.animations.firstIndex(where: { $0.id == id }), !values.isEmpty { layer.animations[index][keyPath: keyPath] = values } } }) }
+    private func animationValuePrompt(_ keyPath: String) -> String {
+        switch keyPath { case "position": "Values: x,y; x,y"; case "bounds": "Values: width,height; width,height"; case "backgroundColor": "Values: #hex, #hex"; case "colors": "Frames: #hex|#hex; #hex|#hex"; default: "Values (comma separated)" }
+    }
+    private func animationValuesBinding(_ animation: KeyframeAnimationModel) -> Binding<String> {
+        Binding(get: {
+            let current = selected?.animations.first(where: { $0.id == animation.id }) ?? animation
+            return formatAnimationValues(current.values ?? current.numericValues.map(AnimationValue.number))
+        }, set: { text in
+            guard let values = parseAnimationValues(text, keyPath: animation.keyPath), !values.isEmpty else { return }
+            update { layer in if let index = layer.animations.firstIndex(where: { $0.id == animation.id }) { layer.animations[index].values = values; layer.animations[index].numericValues = values.compactMap { if case .number(let value) = $0 { value } else { nil } } } }
+        })
+    }
+    private func formatAnimationValues(_ values: [AnimationValue]) -> String {
+        let structured = values.contains { value in switch value { case .point, .size, .colors: true; default: false } }
+        return values.map { value in switch value { case .number(let number): number.formatted(); case .point(let point): "\(point.x.formatted()),\(point.y.formatted())"; case .size(let size): "\(size.width.formatted()),\(size.height.formatted())"; case .color(let color): color; case .colors(let stops): stops.map(\.color).joined(separator: "|") } }.joined(separator: structured ? "; " : ", ")
+    }
+    private func parseAnimationValues(_ text: String, keyPath: String) -> [AnimationValue]? {
+        if keyPath == "position" || keyPath == "bounds" { return text.split(separator: ";").compactMap { pair in let numbers = pair.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }; guard numbers.count == 2 else { return nil }; return keyPath == "position" ? .point(.init(x: numbers[0], y: numbers[1])) : .size(.init(width: numbers[0], height: numbers[1])) } }
+        if keyPath == "backgroundColor" { return text.split(separator: ",").map { .color($0.trimmingCharacters(in: .whitespaces)) } }
+        if keyPath == "colors" { return text.split(separator: ";").map { frame in .colors(frame.split(separator: "|").map { .init(color: $0.trimmingCharacters(in: .whitespaces), opacity: 1) }) } }
+        let numbers = text.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        return numbers.isEmpty ? nil : numbers.map(AnimationValue.number)
+    }
     private func gyroBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<GyroDictionaryModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.gyroDictionaries?.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { value in update { layer in if let index = layer.gyroDictionaries?.firstIndex(where: { $0.id == id }) { layer.gyroDictionaries?[index][keyPath: keyPath] = value } } }) }
     private func emitterBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<EmitterCellModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.emitterCells?.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { value in update { layer in if let index = layer.emitterCells?.firstIndex(where: { $0.id == id }) { layer.emitterCells?[index][keyPath: keyPath] = value } } }) }
     private func emitterField(_ title: String, _ cell: EmitterCellModel, _ keyPath: WritableKeyPath<EmitterCellModel, Double>) -> some View { LabeledContent(title) { TextField(title, value: emitterBinding(cell.id, keyPath, cell[keyPath: keyPath]), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
