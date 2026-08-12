@@ -32,7 +32,7 @@ struct InspectorView: View {
                     if layer.kind == .text {
                         Section("Text") {
                             TextField("Text", text: optionalStringBinding(id, \.text, fallback: layer.text ?? ""))
-                            numeric("Font size", id: id, keyPath: \.fontSize, value: layer.fontSize ?? 32)
+                            optionalNumeric("Font size", id: id, keyPath: \.fontSize, value: layer.fontSize ?? 32)
                         }
                     }
                 }
@@ -67,6 +67,18 @@ struct InspectorView: View {
             TextField(title, value: binding(id, keyPath, fallback: value), format: .number)
                 .multilineTextAlignment(.trailing)
                 .keyboardType(.numbersAndPunctuation)
+        }
+    }
+
+    @ViewBuilder
+    private func optionalNumeric(_ title: String, id: UUID, keyPath: WritableKeyPath<LayerModel, Double?>, value: Double) -> some View {
+        LabeledContent(title) {
+            TextField(title, value: Binding(
+                get: { project.root.find(id: id)?[keyPath: keyPath] ?? value },
+                set: { newValue in project.root.update(id: id) { $0[keyPath: keyPath] = newValue } }
+            ), format: .number)
+            .multilineTextAlignment(.trailing)
+            .keyboardType(.numbersAndPunctuation)
         }
     }
 }
