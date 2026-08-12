@@ -176,7 +176,7 @@ struct ProjectsView: View {
             .padding(16)
             .background(CATheme.card(scheme))
             .clipShape(RoundedRectangle(cornerRadius: CATheme.radius))
-            .overlay(RoundedRectangle(cornerRadius: CATheme.radius).stroke(selectedIDs.contains(project.id) ? CATheme.accent : .separator, lineWidth: selectedIDs.contains(project.id) ? 2 : 0.5))
+            .overlay(RoundedRectangle(cornerRadius: CATheme.radius).stroke(selectedIDs.contains(project.id) ? CATheme.accent : Color(uiColor: .separator), lineWidth: selectedIDs.contains(project.id) ? 2 : 0.5))
         }.buttonStyle(.plain)
     }
 
