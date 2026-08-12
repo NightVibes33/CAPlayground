@@ -57,6 +57,7 @@ private struct WallpaperDownloadStat: Codable, Sendable {
 
 struct WallpapersView: View {
     @Environment(ProjectStore.self) private var store
+    @Environment(AuthStore.self) private var auth
 
     private enum SortOrder: String, CaseIterable {
         case oldest = "Oldest to Newest"
@@ -75,6 +76,9 @@ struct WallpapersView: View {
     @State private var importingID: String?
     @State private var importedProject: CAProjectDocument?
     @State private var importError: String?
+    @State private var showingSubmission = false
+
+    private var cacheDirectory: URL { FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("WallpaperGallery", isDirectory: true) }
 
     private var wallpapers: [WallpaperItem] {
         guard let response else { return [] }
@@ -136,6 +140,7 @@ struct WallpapersView: View {
         .fullScreenCover(item: $importedProject) { project in
             EditorView(initialProject: project)
         }
+        .sheet(isPresented: $showingSubmission) { SubmitWallpaperView { Task { await loadWallpapers() } } }
         .alert("Failed to open wallpaper", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
             Button("OK") { importError = nil }
         } message: {
@@ -149,10 +154,8 @@ struct WallpapersView: View {
 
     private var controls: some View {
         VStack(spacing: 12) {
-            Link(destination: URL(string: "https://caplayground.vercel.app/wallpapers")!) {
-                Label("Submit Wallpaper", systemImage: "square.and.arrow.up")
-            }
-            .buttonStyle(.borderedProminent)
+            if auth.isSignedIn { Button { showingSubmission = true } label: { Label("Submit Wallpaper", systemImage: "square.and.arrow.up") }.buttonStyle(.borderedProminent) }
+            else { NavigationLink { SignInView() } label: { Label("Submit Wallpaper", systemImage: "square.and.arrow.up") }.buttonStyle(.borderedProminent) }
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { searchField; sortPicker }
@@ -302,9 +305,11 @@ struct WallpapersView: View {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
             self.response = try JSONDecoder().decode(WallpapersResponse.self, from: data)
+            try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+            try? data.write(to: cacheDirectory.appendingPathComponent("wallpapers.json"), options: .atomic)
             failed = false
         } catch {
-            failed = true
+            if let data = try? Data(contentsOf: cacheDirectory.appendingPathComponent("wallpapers.json")), let cached = try? JSONDecoder().decode(WallpapersResponse.self, from: data) { response = cached; failed = false } else { failed = true }
         }
         isLoading = false
     }
@@ -325,12 +330,14 @@ struct WallpapersView: View {
         do {
             let (data, response) = try await URLSession.shared.data(from: fileURL)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+            try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+            try? data.write(to: cacheDirectory.appendingPathComponent("\(item.id).tendies"), options: .atomic)
             let project = try CAArchiveImporter.importProject(data: data, suggestedName: item.name)
             store.update(project)
             selected = nil
             importedProject = project
         } catch {
-            importError = error.localizedDescription
+            if let data = try? Data(contentsOf: cacheDirectory.appendingPathComponent("\(item.id).tendies")), let project = try? CAArchiveImporter.importProject(data: data, suggestedName: item.name) { store.update(project); selected = nil; importedProject = project } else { importError = error.localizedDescription }
         }
     }
 
