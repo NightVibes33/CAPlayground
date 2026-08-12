@@ -25,20 +25,22 @@ struct StatePanel: View {
             }
             .padding(12)
             Divider()
-            List(["Base State"] + project.states, id: \.self) { state in
-                HStack {
-                    Image(systemName: state == project.activeState ? "circle.inset.filled" : "circle")
-                        .foregroundStyle(state == project.activeState ? CATheme.accent : .secondary)
-                    Text(state)
-                    Spacer()
-                    Text("\(project.stateOverrides[state]?.count ?? 0)")
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(["Base State"] + project.states, id: \.self) { state in
+                        HStack {
+                            Image(systemName: state == project.activeState ? "circle.inset.filled" : "circle")
+                                .foregroundStyle(state == project.activeState ? CATheme.accent : .secondary)
+                            Text(state)
+                            Spacer()
+                            Text("\(project.stateOverrides[state]?.count ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        .font(.system(size: 14)).padding(.horizontal, 12).frame(height: 40)
+                        .background(state == project.activeState ? CATheme.accent.opacity(0.30) : .clear)
+                        .contentShape(Rectangle()).onTapGesture { project.activeState = state }
+                    }
                 }
-                .tag(state)
-                .contentShape(Rectangle())
-                .onTapGesture { project.activeState = state }
             }
-            .listStyle(.plain)
         }
         .caPanel()
         .sheet(isPresented: $viewAllOpen) { stateOverview }
