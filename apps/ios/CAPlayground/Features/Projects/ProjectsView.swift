@@ -111,7 +111,7 @@ struct ProjectsView: View {
                     Section("Time Period") { ForEach(DateFilter.allCases, id: \.self) { option in checkButton(option.rawValue, selected: dateFilter == option) { dateFilter = option } } }
                     Section("Sort By") { ForEach(SortOrder.allCases, id: \.self) { option in checkButton(option.rawValue, selected: sortOrder == option) { sortOrder = option } } }
                 } label: { Image(systemName: "slider.horizontal.3").frame(width: 38, height: 38) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(CAWebButtonStyle(variant: .outline, height: 38))
             }
             .padding(.top, 12)
         }
@@ -122,15 +122,15 @@ struct ProjectsView: View {
         HStack(spacing: 8) {
             Button(selectMode ? "Done" : "Select") {
                 selectMode.toggle(); if !selectMode { selectedIDs.removeAll() }
-            }.buttonStyle(.bordered)
+            }.buttonStyle(CAWebButtonStyle(variant: .outline))
             if selectMode {
                 Button("Delete (\(selectedIDs.count))", systemImage: "trash", role: .destructive) {
                     for project in store.projects where selectedIDs.contains(project.id) { store.delete(project) }
                     selectedIDs.removeAll()
-                }.buttonStyle(.borderedProminent).tint(CATheme.destructive).disabled(selectedIDs.isEmpty)
+                }.buttonStyle(CAWebButtonStyle(variant: .outline)).foregroundStyle(CATheme.destructive).disabled(selectedIDs.isEmpty)
             } else {
-                Button("Import", systemImage: "square.and.arrow.down") { importOpen = true }.buttonStyle(.bordered)
-                Button("New Project", systemImage: "plus") { createOpen = true }.buttonStyle(.borderedProminent)
+                Button("Import", systemImage: "square.and.arrow.down") { importOpen = true }.buttonStyle(CAWebButtonStyle(variant: .outline))
+                Button("New Project", systemImage: "plus") { createOpen = true }.buttonStyle(CAWebButtonStyle(variant: .accent))
             }
         }
     }
@@ -177,7 +177,7 @@ struct ProjectsView: View {
             .padding(16)
             .background(CATheme.card(scheme))
             .clipShape(RoundedRectangle(cornerRadius: CATheme.radius))
-            .overlay(RoundedRectangle(cornerRadius: CATheme.radius).stroke(selectedIDs.contains(project.id) ? CATheme.accent : Color(uiColor: .separator), lineWidth: selectedIDs.contains(project.id) ? 2 : 0.5))
+            .overlay(RoundedRectangle(cornerRadius: CATheme.radius).stroke(selectedIDs.contains(project.id) ? CATheme.accent : CATheme.border(scheme), lineWidth: selectedIDs.contains(project.id) ? 2 : 1))
         }.buttonStyle(.plain)
     }
 
