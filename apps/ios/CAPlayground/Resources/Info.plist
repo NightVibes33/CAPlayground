@@ -31,6 +31,7 @@
 <dict><key>CFBundleTypeName</key><string>Core Animation Archive</string><key>CFBundleTypeRole</key><string>Editor</string><key>LSHandlerRank</key><string>Alternate</string><key>LSItemContentTypes</key><array><string>com.nightvibes33.caplayground.ca-archive</string></array></dict>
 <dict><key>CFBundleTypeName</key><string>CAPlayground Tendies Wallpaper</string><key>CFBundleTypeRole</key><string>Editor</string><key>LSHandlerRank</key><string>Owner</string><key>LSItemContentTypes</key><array><string>com.nightvibes33.caplayground.tendies</string></array></dict>
 </array>
+<key>LSSupportsOpeningDocumentsInPlace</key><true/>
 <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
 <key>UILaunchScreen</key><dict/>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
