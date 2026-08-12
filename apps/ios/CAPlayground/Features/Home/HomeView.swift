@@ -19,16 +19,19 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                    hero
-                    layersSection
-                    growingSection
-                    footer
+            ZStack(alignment: .top) {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        hero
+                        layersSection
+                        growingSection
+                        footer
+                    }
                 }
+                .background(CATheme.background(scheme).ignoresSafeArea())
+                navigation.padding(.horizontal, horizontalSizeClass == .compact ? 16 : 24).padding(.top, 8)
             }
-            .background(CATheme.background(scheme).ignoresSafeArea())
-            .safeAreaInset(edge: .top) { navigation }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
@@ -36,7 +39,7 @@ struct HomeView: View {
         HStack(spacing: 12) {
             Image(scheme == .dark ? "icon-dark" : "icon-light")
                 .resizable().frame(width: 32, height: 32).clipShape(RoundedRectangle(cornerRadius: 8))
-            Text("CAPlayground").font(.title3.bold())
+            Text("CAPlayground").font(.custom("Helvetica Neue", size: 20).weight(.bold))
             Spacer()
             if horizontalSizeClass == .compact {
                 Menu {
@@ -68,17 +71,20 @@ struct HomeView: View {
                         Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { Task { await auth.signOut() } }
                     } label: { Image(systemName: "person").frame(width: 36, height: 36) }
                 } else {
-                    NavigationLink("Sign In") { SignInView() }.buttonStyle(.bordered)
+                NavigationLink("Sign In") { SignInView() }.buttonStyle(CAWebButtonStyle(variant: .outline))
                 }
                 NavigationLink(destination: ProjectsView()) {
                     Label("Projects", systemImage: "arrow.right").labelStyle(.titleAndIcon)
-                }.buttonStyle(.borderedProminent).tint(CATheme.accent)
+                }.buttonStyle(CAWebButtonStyle(variant: .accent))
                 Button { toggleTheme() } label: { Image(systemName: appearance == "dark" ? "sun.max" : "moon").frame(width: 36, height: 36) }
                     .buttonStyle(.plain).accessibilityLabel("Toggle theme")
             }
         }
         .padding(.horizontal, 20).frame(height: 56)
-        .background(.regularMaterial).overlay(alignment: .bottom) { Divider() }
+        .background(CATheme.background(scheme).opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 16).stroke(CATheme.border(scheme), lineWidth: 1) }
+        .shadow(color: .black.opacity(0.10), radius: 10, y: 4)
     }
 
     private func toggleTheme() {
@@ -95,7 +101,7 @@ struct HomeView: View {
                     HStack(alignment: .bottom, spacing: 32) { heroCopy; githubButton }
                     VStack(alignment: .leading, spacing: 24) { heroCopy; githubButton }
                 }
-                .padding(.horizontal, 24).padding(.bottom, 48).frame(maxWidth: 1400)
+                .padding(.horizontal, horizontalSizeClass == .compact ? 16 : 24).padding(.bottom, horizontalSizeClass == .compact ? 40 : 64).frame(maxWidth: 1400)
             }.frame(maxWidth: .infinity)
         }.containerRelativeFrame(.vertical)
     }
@@ -109,15 +115,16 @@ struct HomeView: View {
                     .background(CATheme.accent.opacity(0.1), in: Capsule())
                     .overlay(Capsule().stroke(CATheme.accent.opacity(0.2)))
             }
-            Text("The Open Source\n") + Text("CA Wallpaper Editor.").foregroundStyle(CATheme.accent)
+            (Text("The Open Source\n") + Text("CA Wallpaper Editor.").foregroundStyle(CATheme.accent))
+                .font(.system(size: horizontalSizeClass == .compact ? 48 : 72, weight: .bold))
+                .tracking(-1.5)
             Text("Create beautiful animated wallpapers for iOS and iPadOS on any desktop computer with CAPlayground.")
                 .font(.title2.weight(.medium)).foregroundStyle(.secondary).frame(maxWidth: 600, alignment: .leading)
             NavigationLink(destination: ProjectsView()) {
                 Label("Get Started", systemImage: "paperplane.fill")
                     .font(.title3.weight(.semibold)).frame(minWidth: 200, minHeight: 56)
-            }.buttonStyle(.borderedProminent).tint(CATheme.accent)
+            }.buttonStyle(CAWebButtonStyle(variant: .accent, height: 56))
         }
-        .font(.system(size: 64, weight: .bold))
         .frame(maxWidth: 900, alignment: .leading)
     }
 
@@ -125,7 +132,7 @@ struct HomeView: View {
         Link(destination: URL(string: "https://github.com/CAPlayground/CAPlayground")!) {
             Label("View GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                 .font(.body.weight(.medium)).frame(minWidth: 200, minHeight: 48)
-        }.buttonStyle(.bordered)
+        }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 48))
     }
 
     private var layersSection: some View {
@@ -139,11 +146,17 @@ struct HomeView: View {
                 ForEach(layers.indices, id: \.self) { index in
                     let kind = layers[index].0
                     let description = layers[index].1
-                    VStack(alignment: .leading, spacing: 16) {
-                        LayerPreview(kind: kind).frame(height: 200)
-                        Text(kind == .basic ? "Basic Layer" : "\(kind.title) Layer").font(.title3.bold())
-                        Text(description).foregroundStyle(.secondary).font(.subheadline)
-                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading).caPanel()
+                    ZStack(alignment: .bottomLeading) {
+                        LayerPreview(kind: kind)
+                        LinearGradient(colors: [.clear, .black.opacity(0.4), .black.opacity(0.9)], startPoint: .top, endPoint: .bottom)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(kind == .basic ? "Basic Layer" : "\(kind.title) Layer").font(.system(size: 22, weight: .bold))
+                            Text(description).font(.system(size: 14)).foregroundStyle(Color(white: 0.82)).lineLimit(horizontalSizeClass == .compact ? 2 : nil)
+                        }.padding(24)
+                    }
+                    .foregroundStyle(.white).frame(height: horizontalSizeClass == .compact ? 300 : 400)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay { RoundedRectangle(cornerRadius: 16).stroke(Color(white: scheme == .dark ? 0.12 : 0.82), lineWidth: 1) }
                 }
             }
         }.padding(.horizontal, 24).padding(.vertical, 96).frame(maxWidth: 1400)
@@ -171,20 +184,52 @@ struct HomeView: View {
 
 private struct LayerPreview: View {
     let kind: LayerKind
+    @State private var animate = false
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 18).fill(.black.opacity(0.88))
+            Color(red: 24 / 255, green: 24 / 255, blue: 27 / 255)
             switch kind {
-            case .basic: RoundedRectangle(cornerRadius: 22).fill(CATheme.accent).frame(width: 110, height: 110)
-            case .gradient: Circle().fill(LinearGradient(colors: [.indigo, CATheme.accent], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 130, height: 130)
-            case .image: Image(systemName: "photo.fill").font(.system(size: 80)).foregroundStyle(CATheme.accent)
-            case .video: Image(systemName: "play.rectangle.fill").font(.system(size: 76)).foregroundStyle(.white)
-            case .emitter: Image(systemName: "sparkles").font(.system(size: 80)).foregroundStyle(CATheme.accent)
-            case .transform: Image(systemName: "move.3d").font(.system(size: 80)).foregroundStyle(.indigo)
-            case .replicator: HStack(spacing: -20) { ForEach(0..<4) { _ in Circle().fill(CATheme.accent.opacity(0.7)).frame(width: 70, height: 70) } }
-            case .liquidGlass: RoundedRectangle(cornerRadius: 30).fill(.ultraThinMaterial).frame(width: 150, height: 110).overlay(RoundedRectangle(cornerRadius: 30).stroke(.white.opacity(0.5)))
+            case .basic:
+                Circle().fill(Color(red: 82 / 255, green: 82 / 255, blue: 1)).frame(width: 96, height: 96).offset(x: 70, y: -70)
+                    .shadow(color: Color.blue.opacity(0.4), radius: 20)
+                RoundedRectangle(cornerRadius: 16).fill(Color(red: 1, green: 82 / 255, blue: 82 / 255)).frame(width: 128, height: 128)
+                    .rotationEffect(.degrees(animate ? 45 : 12)).shadow(color: Color.red.opacity(0.4), radius: 20)
+            case .gradient:
+                LinearGradient(colors: [.indigo, .purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .overlay { RadialGradient(colors: [.white.opacity(0.4), .clear], center: UnitPoint(x: 0.5, y: 1.2), startRadius: 0, endRadius: 260) }
+            case .image:
+                Image("app-dark").resizable().scaledToFill().opacity(0.8)
+            case .video:
+                Image("app-dark").resizable().scaledToFill().opacity(0.8)
+                Image(systemName: "pause.fill").font(.system(size: 14)).foregroundStyle(.white).padding(10)
+                    .background(.black.opacity(0.5), in: Circle()).overlay(Circle().stroke(.white.opacity(0.1))).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(16)
+            case .emitter:
+                TimelineView(.animation) { context in
+                    Canvas { graphics, size in
+                        for index in 0..<22 {
+                            let phase = context.date.timeIntervalSinceReferenceDate * 0.2 + Double(index) * 0.071
+                            let x = CGFloat(Double(index * 83 % 101) / 100) * size.width
+                            let y = CGFloat(phase.truncatingRemainder(dividingBy: 1.2) / 1.2) * (size.height + 50) - 25
+                            let rect = CGRect(x: x, y: y, width: 7, height: 7)
+                            graphics.stroke(Path(ellipseIn: rect), with: .color(.white.opacity(0.8)), lineWidth: 1.5)
+                        }
+                    }
+                }
+            case .transform:
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24).fill(Color(white: 0.16)).frame(width: 100, height: 180).overlay { RoundedRectangle(cornerRadius: 24).stroke(Color(white: 0.28), lineWidth: 2) }
+                    RoundedRectangle(cornerRadius: 19).fill(.black).frame(width: 92, height: 172)
+                    RoundedRectangle(cornerRadius: 6).fill(CATheme.accent).frame(width: 32, height: 32).shadow(color: CATheme.accent.opacity(0.5), radius: 8)
+                }.rotation3DEffect(.degrees(animate ? 10 : -8), axis: (x: 0.5, y: 1, z: 0), perspective: 0.5)
+            case .replicator:
+                ZStack { ForEach(0..<5) { index in RoundedRectangle(cornerRadius: 12).fill(CATheme.accent).frame(width: 64, height: 48).offset(x: CGFloat(index - 2) * 58).rotationEffect(.degrees(Double(index * 10))) } }
+            case .liquidGlass:
+                Image("app-light").resizable().scaledToFill().overlay { RadialGradient(colors: [.yellow.opacity(0.5), .red.opacity(0.5), .purple.opacity(0.65)], center: .center, startRadius: 5, endRadius: 230) }
+                RoundedRectangle(cornerRadius: 24).fill(.ultraThinMaterial).frame(width: 192, height: 192).shadow(color: .black.opacity(0.5), radius: 25, y: 20)
             default: Image(systemName: kind.symbol).font(.system(size: 76)).foregroundStyle(CATheme.accent)
             }
         }
+        .clipped()
+        .onAppear { withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true)) { animate = true } }
     }
 }
