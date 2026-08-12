@@ -43,7 +43,7 @@ struct TendiesCheckerView: View {
             CAWebsiteNavigation().padding(.horizontal, sizeClass == .compact ? 16 : 24).padding(.top, 8)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.tendies, .caArchive, .zip], allowsMultipleSelection: false) { response in
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.tendies, UTType(filenameExtension: "ca") ?? .zip, .zip], allowsMultipleSelection: false) { response in
             guard case .success(let urls) = response, let url = urls.first else { return }
             analyse(url)
         }
