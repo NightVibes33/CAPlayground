@@ -85,11 +85,17 @@ struct LayerPanel: View {
         .contentShape(Rectangle()).onTapGesture { if !selectMode { selectedID = project.root.id } }
     }
 
-    @ViewBuilder private func rowTree(_ layer: LayerModel, depth: Int) -> some View {
-        layerRow(layer, depth: depth)
-        if !collapsed.contains(layer.id), layer.kind != .video {
-            ForEach(layer.children) { child in rowTree(child, depth: depth + 1) }
-        }
+    private func rowTree(_ layer: LayerModel, depth: Int) -> AnyView {
+        AnyView(
+            VStack(spacing: 0) {
+                layerRow(layer, depth: depth)
+                if !collapsed.contains(layer.id), layer.kind != .video {
+                    ForEach(layer.children) { child in
+                        rowTree(child, depth: depth + 1)
+                    }
+                }
+            }
+        )
     }
 
     private func layerRow(_ layer: LayerModel, depth: Int) -> some View {
