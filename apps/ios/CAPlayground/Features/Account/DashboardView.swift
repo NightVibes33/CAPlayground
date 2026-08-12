@@ -71,10 +71,17 @@ private struct SubmitWallpaperView: View {
     @Environment(AuthStore.self) private var auth
     @Environment(\.dismiss) private var dismiss
     @State private var step: Step = .form
-    @State private var name = "", description = ""
-    @State private var tendies: Data?, video: Data?
-    @State private var tendiesName = "", videoName = "", videoExtension = "mp4"
-    @State private var pickTendies = false, pickVideo = false, agreedRules = false, agreedQuality = false
+    @State private var name = ""
+    @State private var description = ""
+    @State private var tendies: Data?
+    @State private var video: Data?
+    @State private var tendiesName = ""
+    @State private var videoName = ""
+    @State private var videoExtension = "mp4"
+    @State private var pickTendies = false
+    @State private var pickVideo = false
+    @State private var agreedRules = false
+    @State private var agreedQuality = false
     @State private var pullRequestURL: URL?
     let completed: () -> Void
 
