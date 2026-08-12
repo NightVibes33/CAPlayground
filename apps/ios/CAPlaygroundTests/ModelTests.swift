@@ -26,4 +26,24 @@ final class ModelTests: XCTestCase {
         root.update(id: childID) { $0.opacity = 0.25 }
         XCTAssertEqual(root.find(id: childID)?.opacity, 0.25)
     }
+
+    func testCAMLContainsDualCADocumentSemantics() {
+        let project = CAProjectDocument.blank(name: "Fixture")
+        let document = project.documents[.floating]!
+        let output = CAMLSerializer.serialize(project: project, document: document, kind: .floating)
+        XCTAssertTrue(output.contains("CAPlayground Root Layer"))
+        XCTAssertTrue(output.contains("<states>"))
+        XCTAssertTrue(output.contains("Locked"))
+        XCTAssertTrue(output.contains("<stateTransitions>"))
+    }
+
+    func testZIPHasValidSignatures() throws {
+        let archive = ZIPArchive.create(entries: [.init(path: "Floating.ca/main.caml", data: Data("test".utf8))])
+        XCTAssertEqual(Array(archive.prefix(4)), [0x50, 0x4b, 0x03, 0x04])
+        XCTAssertTrue(archive.contains(Data([0x50, 0x4b, 0x05, 0x06])))
+    }
+}
+
+private extension Data {
+    func contains(_ other: Data) -> Bool { range(of: other) != nil }
 }

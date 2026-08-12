@@ -1,5 +1,6 @@
 import UIKit
 import QuartzCore
+import CoreImage
 
 @MainActor
 final class CoreAnimationRenderer {
@@ -65,6 +66,18 @@ final class CoreAnimationRenderer {
         layer.masksToBounds = model.masksToBounds
         layer.isGeometryFlipped = model.geometryFlipped
         layer.compositingFilter = publicCompositingFilter(named: model.blendMode)
+        layer.filters = model.filters.compactMap { filter in
+            guard filter.enabled else { return nil }
+            switch filter.type {
+            case "gaussianBlur": return CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: filter.value])
+            case "colorContrast": return CIFilter(name: "CIColorControls", parameters: [kCIInputContrastKey: filter.value])
+            case "colorSaturate": return CIFilter(name: "CIColorControls", parameters: [kCIInputSaturationKey: filter.value])
+            case "colorHueRotate": return CIFilter(name: "CIHueAdjust", parameters: [kCIInputAngleKey: filter.value * .pi / 180])
+            case "colorInvert": return CIFilter(name: "CIColorInvert")
+            case "CISepiaTone": return CIFilter(name: "CISepiaTone", parameters: [kCIInputIntensityKey: filter.value])
+            default: return nil
+            }
+        }
 
         var transform = CATransform3DIdentity
         if let perspective = model.perspective, perspective != 0 { transform.m34 = CGFloat(-1 / perspective) }
@@ -159,16 +172,21 @@ final class CoreAnimationRenderer {
         layer.emitterShape = CAEmitterLayerEmitterShape(rawValue: model.emitterShape ?? "point")
         layer.emitterMode = CAEmitterLayerEmitterMode(rawValue: model.emitterMode ?? "volume")
         layer.renderMode = CAEmitterLayerRenderMode(rawValue: model.renderMode ?? "unordered")
-        let cell = CAEmitterCell()
-        cell.birthRate = 18
-        cell.lifetime = 2.5
-        cell.velocity = 45
-        cell.velocityRange = 25
-        cell.scale = 0.03
-        cell.scaleRange = 0.02
-        cell.alphaSpeed = -0.35
-        cell.contents = UIImage(systemName: "sparkle")?.withTintColor(.white).cgImage
-        layer.emitterCells = [cell]
+        layer.emitterCells = (model.emitterCells ?? [.init()]).map { model in
+            let cell = CAEmitterCell(); cell.name = model.name; cell.birthRate = Float(model.birthRate)
+            cell.lifetime = Float(model.lifetime); cell.lifetimeRange = Float(model.lifetimeRange)
+            cell.velocity = CGFloat(model.velocity); cell.velocityRange = CGFloat(model.velocityRange)
+            cell.emissionLongitude = CGFloat(model.emissionLongitude * .pi / 180)
+            cell.emissionLatitude = CGFloat(model.emissionLatitude * .pi / 180)
+            cell.emissionRange = CGFloat(model.emissionRange * .pi / 180)
+            cell.scale = CGFloat(model.scale); cell.scaleRange = CGFloat(model.scaleRange); cell.scaleSpeed = CGFloat(model.scaleSpeed)
+            cell.alphaRange = Float(model.alphaRange); cell.alphaSpeed = Float(model.alphaSpeed)
+            cell.spin = CGFloat(model.spin * .pi / 180); cell.spinRange = CGFloat(model.spinRange * .pi / 180)
+            cell.xAcceleration = CGFloat(model.xAcceleration); cell.yAcceleration = CGFloat(model.yAcceleration)
+            cell.color = UIColor(caHex: model.color)?.cgColor
+            cell.contents = model.imageName.flatMap(UIImage.init(named:))?.cgImage ?? UIImage(systemName: "sparkle")?.withTintColor(.white).cgImage
+            return cell
+        }
         return layer
     }
 
