@@ -43,7 +43,7 @@ struct TendiesCheckerView: View {
             CAWebsiteNavigation().padding(.horizontal, sizeClass == .compact ? 16 : 24).padding(.top, 8)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.tendies, UTType(filenameExtension: "ca") ?? .zip, .zip], allowsMultipleSelection: false) { response in
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.tendies], allowsMultipleSelection: false) { response in
             guard case .success(let urls) = response, let url = urls.first else { return }
             analyse(url)
         }
@@ -72,7 +72,7 @@ struct TendiesCheckerView: View {
             .background(CATheme.muted(scheme).opacity(0.32), in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(CATheme.border(scheme), style: StrokeStyle(lineWidth: 2, dash: [7])))
             .dropDestination(for: URL.self) { urls, _ in
-                guard let url = urls.first else { return false }
+                guard let url = urls.first, url.pathExtension.lowercased() == "tendies" else { return false }
                 analyse(url)
                 return true
             }

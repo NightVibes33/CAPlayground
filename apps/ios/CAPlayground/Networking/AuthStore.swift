@@ -402,8 +402,8 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
     }
 
     func updatePassword(_ password: String) async -> Bool {
-        guard password.count >= 6, let token = await validAccessToken() else {
-            error = "Password must be at least 6 characters."
+        guard password.count >= 8, let token = await validAccessToken() else {
+            error = "Password must be at least 8 characters."
             return false
         }
         do {
