@@ -8,6 +8,7 @@ struct CAPlaygroundApp: App {
 
     var body: some Scene {
         WindowGroup {
+            let resetBinding = Binding(get: { auth.requiresPasswordReset }, set: { auth.requiresPasswordReset = $0 })
             HomeView()
                 .environment(store)
                 .environment(auth)
@@ -15,6 +16,8 @@ struct CAPlaygroundApp: App {
                 .preferredColorScheme(
                     appearance == "dark" ? .dark : appearance == "light" ? .light : nil
                 )
+                .onOpenURL { url in Task { await auth.handleIncomingURL(url) } }
+                .sheet(isPresented: resetBinding) { ResetPasswordView() }
         }
     }
 }
