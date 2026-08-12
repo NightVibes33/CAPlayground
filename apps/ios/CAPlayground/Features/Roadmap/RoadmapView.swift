@@ -9,6 +9,8 @@ private struct RoadmapEntry: Identifiable {
 }
 
 struct RoadmapView: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var selectedMonth = 3
 
     private let months: [[RoadmapEntry]] = [
@@ -38,76 +40,68 @@ struct RoadmapView: View {
     ]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Project Roadmap")
-                        .font(.system(size: 44, weight: .bold))
-                    Text("What's cooking in CAPlayground? (Last Updated: 17th November, 2025)")
-                        .foregroundStyle(.secondary)
-                }
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Project Roadmap").font(.system(size: sizeClass == .compact ? 40 : 52, weight: .bold))
+                            Text("What's cooking in CAPlayground? (Last Updated: 17th November, 2025)").foregroundStyle(.secondary)
+                        }.padding(.bottom, 24)
 
-                Picker("Month", selection: $selectedMonth) {
-                    Text("Month 1").tag(1)
-                    Text("Month 2").tag(2)
-                    Text("Month 3").tag(3)
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 420)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { monthButtons }
+                            VStack(alignment: .leading, spacing: 8) { monthButtons }
+                        }.padding(.bottom, 40)
 
-                VStack(spacing: 24) {
-                    ForEach(months[selectedMonth - 1]) { item in
-                        roadmapCard(item)
+                        VStack(spacing: 24) { ForEach(months[selectedMonth - 1]) { item in roadmapCard(item) } }
                     }
+                    .frame(maxWidth: 1152, alignment: .leading)
+                    .padding(.horizontal, sizeClass == .compact ? 12 : 24)
+                    .padding(.top, sizeClass == .compact ? 112 : 144)
+                    .padding(.bottom, 96)
+                    .frame(maxWidth: .infinity)
+                    CAWebsiteFooter()
                 }
             }
-            .frame(maxWidth: 1100, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 64)
-            .frame(maxWidth: .infinity)
+            .background(CATheme.background(scheme).ignoresSafeArea())
+            CAWebsiteNavigation().padding(.horizontal, sizeClass == .compact ? 16 : 24).padding(.top, 8)
         }
-        .navigationTitle("Roadmap")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    @ViewBuilder private var monthButtons: some View { monthButton(1); monthButton(2); monthButton(3) }
+
+    private func monthButton(_ month: Int) -> some View {
+        Button("Month \(month)") { selectedMonth = month }.buttonStyle(CAWebButtonStyle(variant: selectedMonth == month ? .accent : .outline))
     }
 
     private func roadmapCard(_ item: RoadmapEntry) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 16) {
-                    numberAndTitle(item)
-                    Spacer()
-                    status(item)
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    numberAndTitle(item)
-                    status(item)
-                }
+                HStack(alignment: .top, spacing: 16) { numberAndTitle(item); Spacer(); status(item) }
+                VStack(alignment: .leading, spacing: 12) { numberAndTitle(item); status(item) }
             }
-            Text(item.description)
-                .foregroundStyle(.secondary)
+            Text(item.description).font(sizeClass == .compact ? .subheadline : .body).foregroundStyle(.secondary)
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .caPanel()
+        .padding(sizeClass == .compact ? 20 : 24).frame(maxWidth: .infinity, alignment: .leading)
+        .background(CATheme.card(scheme), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).stroke(CATheme.border(scheme), lineWidth: 1) }
     }
 
     private func numberAndTitle(_ item: RoadmapEntry) -> some View {
         HStack(spacing: 12) {
-            Text("\(item.id)")
-                .font(.headline)
-                .foregroundStyle(.black)
-                .frame(width: 36, height: 36)
-                .background(CATheme.accent, in: RoundedRectangle(cornerRadius: 8))
-            Text(item.title).font(.title2.weight(.semibold))
+            Text("\(item.id)").font(.headline).foregroundStyle(CATheme.foreground(scheme))
+                .frame(width: sizeClass == .compact ? 32 : 36, height: sizeClass == .compact ? 32 : 36)
+                .background(CATheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            Text(item.title).font(.system(size: sizeClass == .compact ? 20 : 24, weight: .semibold))
         }
     }
 
     private func status(_ item: RoadmapEntry) -> some View {
-        Text(item.status)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(item.isComplete ? CATheme.accent : Color.secondary.opacity(0.15), in: Capsule())
-            .foregroundStyle(item.isComplete ? Color.black : Color.primary)
+        Text(item.status).font(.caption.weight(.semibold)).padding(.horizontal, 10).padding(.vertical, 6)
+            .background(item.isComplete ? CATheme.accent.opacity(0.14) : CATheme.muted(scheme).opacity(0.55), in: Capsule())
+            .foregroundStyle(item.isComplete ? CATheme.accent : .secondary)
+            .overlay(Capsule().stroke(item.isComplete ? CATheme.accent.opacity(0.3) : CATheme.border(scheme)))
     }
 }

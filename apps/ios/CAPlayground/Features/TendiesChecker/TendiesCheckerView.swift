@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct TendiesCheckerView: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var importing = false
     @State private var fileName: String?
     @State private var result: TendiesAnalysis?
@@ -10,40 +11,67 @@ struct TendiesCheckerView: View {
     @State private var isAnalysing = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                VStack(spacing: 12) {
-                    Text("Tendies Checker").font(.system(size: 44, weight: .bold))
-                    Text("Upload a .tendies file to see the info for the wallpaper.").foregroundStyle(.secondary)
-                }.multilineTextAlignment(.center)
-                VStack(alignment: .leading, spacing: 20) {
-                    Label("Tendies File Analysis", systemImage: "doc.text").font(.title3.bold())
-                    Button { importing = true } label: {
-                        VStack(spacing: 10) {
-                            if isAnalysing { ProgressView() } else { Image(systemName: "square.and.arrow.up").font(.title) }
-                            Text(isAnalysing ? "Analysing tendies..." : "Choose a .tendies file")
-                            Text("This tool will show CAPlayground info and per file breakdowns.").font(.caption).foregroundStyle(.secondary)
-                            if let fileName { Text("Selected file: \(fileName)").font(.caption).foregroundStyle(.secondary) }
-                        }.frame(maxWidth: .infinity).padding(28)
-                    }.buttonStyle(.plain)
-                        .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.secondary.opacity(0.35), style: StrokeStyle(lineWidth: 2, dash: [7])))
-                    if let error { Label(error, systemImage: "xmark.circle.fill").foregroundStyle(.red) }
-                    if let result { analysis(result) }
-                }.padding(20).caPanel()
-            }.frame(maxWidth: 960).padding(.horizontal, 16).padding(.vertical, 40)
-        }.background(CATheme.background(scheme).ignoresSafeArea())
-            .navigationTitle("Tendies Checker").navigationBarTitleDisplayMode(.inline)
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.tendies, .zip], allowsMultipleSelection: false) { response in
-                guard case .success(let urls) = response, let url = urls.first else { return }; analyse(url)
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        VStack(spacing: 12) {
+                            Text("Tendies Checker").font(.system(size: sizeClass == .compact ? 40 : 52, weight: .bold))
+                            Text("Upload a .tendies file to see the info for the wallpaper.").font(sizeClass == .compact ? .subheadline : .body).foregroundStyle(.secondary)
+                        }
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, sizeClass == .compact ? 32 : 40)
+
+                        checkerCard
+                    }
+                    .frame(maxWidth: 1024)
+                    .padding(.horizontal, sizeClass == .compact ? 12 : 24)
+                    .padding(.top, sizeClass == .compact ? 104 : 120)
+                    .padding(.bottom, 64)
+                    .frame(maxWidth: .infinity)
+
+                    CAWebsiteFooter()
+                }
             }
+            .background(CATheme.background(scheme).ignoresSafeArea())
+            CAWebsiteNavigation().padding(.horizontal, sizeClass == .compact ? 16 : 24).padding(.top, 8)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.tendies, .zip], allowsMultipleSelection: false) { response in
+            guard case .success(let urls) = response, let url = urls.first else { return }; analyse(url)
+        }
+    }
+
+    private var checkerCard: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Label("Tendies File Analysis", systemImage: "doc.text").font(.title3.bold())
+            Button { importing = true } label: {
+                VStack(spacing: 10) {
+                    if isAnalysing { ProgressView() } else { Image(systemName: "square.and.arrow.up").font(.title) }
+                    Text(isAnalysing ? "Analysing tendies..." : "Choose a .tendies file").fontWeight(.medium)
+                    Text("This tool will show CAPlayground info and per file breakdowns.").font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    if let fileName { Text("Selected file: \(fileName)").font(.caption).foregroundStyle(.secondary) }
+                }.frame(maxWidth: .infinity).padding(sizeClass == .compact ? 24 : 32)
+            }
+            .buttonStyle(.plain)
+            .background(CATheme.muted(scheme).opacity(0.32), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(CATheme.border(scheme), style: StrokeStyle(lineWidth: 2, dash: [7])))
+            if let error { Label(error, systemImage: "xmark.circle.fill").foregroundStyle(.red) }
+            if let result { analysis(result) }
+        }
+        .padding(sizeClass == .compact ? 20 : 24)
+        .background(CATheme.card(scheme), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).stroke(CATheme.border(scheme), lineWidth: 1) }
     }
 
     @ViewBuilder private func analysis(_ value: TendiesAnalysis) -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack { Label("Project size: \(value.width) × \(value.height)", systemImage: "info.circle"); if value.video { Text("Video wallpaper detected").foregroundStyle(.orange) } }.font(.caption)
+            ViewThatFits(in: .horizontal) {
+                HStack { Label("Project size: \(value.width) × \(value.height)", systemImage: "info.circle"); if value.video { Text("Video wallpaper detected").foregroundStyle(.orange) } }
+                VStack(alignment: .leading, spacing: 6) { Label("Project size: \(value.width) × \(value.height)", systemImage: "info.circle"); if value.video { Text("Video wallpaper detected").foregroundStyle(.orange) } }
+            }.font(.caption)
             Text("CAPlayground Info").font(.headline)
-            ViewThatFits {
+            ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 32) { status("Made in CAPlayground?", value.madeInCA); status("Was the wallpaper remixed?", value.remixed ? "Yes" : "No") }
                 VStack(alignment: .leading, spacing: 16) { status("Made in CAPlayground?", value.madeInCA); status("Was the wallpaper remixed?", value.remixed ? "Yes" : "No") }
             }
@@ -52,12 +80,14 @@ struct TendiesCheckerView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(document.title).font(.headline)
                     Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 5) {
-                        GridRow { Text("Layers"); Text("\(document.layers)") }; GridRow { Text("States"); Text("\(document.states)") }
-                        GridRow { Text("State transitions"); Text("\(document.transitions)") }; GridRow { Text("Animations"); Text("\(document.animations)") }
+                        GridRow { Text("Layers"); Text("\(document.layers)") }
+                        GridRow { Text("States"); Text("\(document.states)") }
+                        GridRow { Text("State transitions"); Text("\(document.transitions)") }
+                        GridRow { Text("Animations"); Text("\(document.animations)") }
                     }.font(.caption)
-                }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(CATheme.muted(scheme).opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }
-            Button("Clear") { fileName = nil; result = nil; error = nil }.buttonStyle(.bordered)
+            Button("Clear") { fileName = nil; result = nil; error = nil }.buttonStyle(CAWebButtonStyle(variant: .outline))
         }
     }
 
@@ -65,7 +95,8 @@ struct TendiesCheckerView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased()).font(.caption.bold()).foregroundStyle(.secondary)
             Text(answer).font(.caption.bold()).padding(.horizontal, 9).padding(.vertical, 4)
-                .foregroundStyle(answer == "Yes" ? .green : answer == "Maybe" ? .orange : .red).overlay(Capsule().stroke(.secondary.opacity(0.35)))
+                .foregroundStyle(answer == "Yes" ? .green : answer == "Maybe" ? .orange : .red)
+                .overlay(Capsule().stroke(CATheme.border(scheme)))
         }
     }
 

@@ -6,28 +6,35 @@ struct DashboardView: View {
     @Environment(AuthStore.self) private var auth
     @Environment(DriveStore.self) private var drive
     @Environment(ProjectStore.self) private var projectStore
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var submissions: [WallpaperSubmission] = []
     @State private var loading = true
     @State private var showingSubmission = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Welcome back\(displayName.isEmpty ? "" : ", \(displayName)")!").font(.system(size: 46, weight: .heavy))
-                    Text("Manage your cloud projects and account settings.").font(.title3).foregroundStyle(.secondary)
+        ZStack(alignment: .topLeading) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Welcome back\(displayName.isEmpty ? "" : ", \(displayName)")!")
+                        .font(.system(size: sizeClass == .compact ? 40 : 60, weight: .heavy))
+                        .tracking(-1.2)
+                    Text("Manage your cloud projects and account settings.")
+                        .font(.title3).foregroundStyle(.secondary).padding(.top, 20)
+                    VStack(spacing: 24) { submissionCard; cloudCard; accountOptions }.padding(.top, 32)
                 }
-                submissionCard
-                cloudCard
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Account Options").font(.title3.bold())
-                    Text("Manage your email, username, password, or delete your account.").foregroundStyle(.secondary)
-                    NavigationLink("Manage Account") { AccountView() }.buttonStyle(.bordered)
-                    Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") { Task { await auth.signOut() } }.buttonStyle(.bordered)
-                }.padding(20).caPanel()
-            }.frame(maxWidth: 1000).padding(20).padding(.vertical, 24)
-        }.navigationTitle("Dashboard").task { submissions = await auth.wallpaperSubmissions(); if drive.connected { await drive.refresh() }; loading = false }
-            .sheet(isPresented: $showingSubmission) { SubmitWallpaperView { Task { submissions = await auth.wallpaperSubmissions() } } }
+                .frame(maxWidth: 768, alignment: .leading)
+                .padding(.horizontal, 16).padding(.top, 80).padding(.bottom, 64)
+                .frame(maxWidth: .infinity)
+            }
+            .background(CATheme.background(scheme).ignoresSafeArea())
+            Button { dismiss() } label: { Label("Back", systemImage: "arrow.left") }
+                .buttonStyle(CAWebButtonStyle(variant: .ghost, height: 32)).padding(.leading, 12).padding(.top, 10)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .task { submissions = await auth.wallpaperSubmissions(); if drive.connected { await drive.refresh() }; loading = false }
+        .sheet(isPresented: $showingSubmission) { SubmitWallpaperView { Task { submissions = await auth.wallpaperSubmissions() } } }
     }
 
     private var displayName: String {
@@ -37,47 +44,104 @@ struct DashboardView: View {
     }
 
     private var submissionCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack { Text("Wallpaper Submissions").font(.title3.bold()); Spacer(); Button("Submit Wallpaper") { showingSubmission = true }.buttonStyle(.borderedProminent).tint(CATheme.accent) }
-            if loading { ProgressView() }
-            else {
-                submissionSection("Awaiting Review", rows: submissions.filter { $0.status == "awaiting_review" }.prefix(3).map { $0 }, empty: "No wallpapers awaiting review")
-                submissionSection("Rejected (Last 30 Days)", rows: submissions.filter { $0.status == "rejected" && ($0.submittedAt ?? .distantPast) > Date().addingTimeInterval(-30 * 86_400) }, empty: "No recently rejected wallpapers")
-                submissionSection("Published", rows: submissions.filter { $0.status == "approved" }, empty: "No published wallpapers yet")
+        VStack(alignment: .leading, spacing: 20) {
+            ViewThatFits(in: .horizontal) {
+                HStack { Text("Wallpaper Submissions").font(.title3.bold()); Spacer(); submitButton }
+                VStack(alignment: .leading, spacing: 12) { Text("Wallpaper Submissions").font(.title3.bold()); submitButton }
             }
-        }.padding(20).caPanel()
+            if loading {
+                Text("Loading your submissions...").font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 16)
+            } else {
+                let awaiting = submissions.filter { $0.status == "awaiting_review" }
+                let rejected = submissions.filter { $0.status == "rejected" && ($0.submittedAt ?? .distantPast) > Date().addingTimeInterval(-30 * 86_400) }
+                let published = submissions.filter { $0.status == "approved" }
+                submissionSection("Awaiting Review", rows: awaiting, empty: "No wallpapers awaiting review", detail: "You can have up to five wallpapers awaiting review at a time.", countText: "\(awaiting.count)/5 slots used")
+                if !rejected.isEmpty { submissionSection("Rejected (Last 30 Days)", rows: rejected, empty: "", detail: "Submissions that were not accepted. These will disappear after 30 days.", countText: "\(rejected.count) rejected") }
+                submissionSection("Published", rows: published, empty: "No published wallpapers yet", detail: "Wallpapers that have been approved and are live in the gallery.", countText: published.isEmpty ? "None yet" : "\(published.count) published")
+            }
+        }
+        .padding(24).background(CATheme.card(scheme), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).stroke(CATheme.border(scheme).opacity(0.8), lineWidth: 1) }
     }
 
-    private func submissionSection(_ title: String, rows: [WallpaperSubmission], empty: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.subheadline.bold())
-            if rows.isEmpty { Text(empty).font(.caption).foregroundStyle(.secondary) }
-            ForEach(rows) { row in
-                HStack { VStack(alignment: .leading) { Text(row.name).fontWeight(.medium); Text(row.description).font(.caption).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); Text(row.status.replacingOccurrences(of: "_", with: " ").capitalized).font(.caption.bold()) }
-                    .padding(12).background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    private var submitButton: some View {
+        Button { showingSubmission = true } label: { Label("Submit Wallpaper", systemImage: "plus") }.buttonStyle(CAWebButtonStyle(variant: .accent))
+    }
+
+    private func submissionSection(_ title: String, rows: [WallpaperSubmission], empty: String, detail: String, countText: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack { Text(title).font(.subheadline.bold()); Spacer(); Text(countText).font(.caption).foregroundStyle(.secondary) }
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+            if rows.isEmpty {
+                VStack(spacing: 4) {
+                    Text(empty).font(.subheadline).foregroundStyle(.secondary)
+                    if title == "Awaiting Review" { Text("Click \"Submit Wallpaper\" to get started").font(.caption).foregroundStyle(.secondary) }
+                    if title == "Published" { Text("They'll appear here once approved").font(.caption).foregroundStyle(.secondary) }
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 20)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(CATheme.border(scheme).opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [5])))
+            } else {
+                ForEach(rows) { row in
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) { Text(row.name).font(.subheadline.weight(.semibold)).lineLimit(1); Text(row.description).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                        Spacer()
+                        Text(statusTitle(row.status)).font(.caption2.weight(.medium)).padding(.horizontal, 8).padding(.vertical, 4).background(statusColor(row.status).opacity(0.12), in: Capsule()).foregroundStyle(statusColor(row.status))
+                    }
+                    .padding(12).background(statusColor(row.status).opacity(0.05), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(statusColor(row.status).opacity(0.2)))
+                }
             }
         }
     }
 
     private var cloudCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack { Label("Cloud Projects", systemImage: "cloud").font(.title3.bold()); Text("BETA").font(.caption.bold()).foregroundStyle(CATheme.accent) }
-            Text("Cloud Projects are stored in your Google Drive account and sync across devices.").foregroundStyle(.secondary)
-            if !drive.connected { Button("Connect Google Drive") { drive.connect() }.buttonStyle(.borderedProminent) }
-            else {
-                Menu("Upload Local Project") { ForEach(projectStore.projects) { project in Button(project.name) { Task { await drive.upload(project) } } } }.buttonStyle(.bordered)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Text("Cloud Projects").font(.title3.bold())
+                Text("BETA").font(.caption2).padding(.horizontal, 8).padding(.vertical, 3).foregroundStyle(.blue).background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 5)).overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.blue.opacity(0.2)))
+            }
+            Text("Sync and manage your projects in the cloud with Google Drive.").font(.subheadline).foregroundStyle(.secondary)
+            if !drive.connected {
+                Button { drive.connect() } label: { Label("Sign in to Google Drive", systemImage: "externaldrive.connected.to.line.below") }.buttonStyle(CAWebButtonStyle(variant: .accent))
+            } else {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 2) { Text("Signed in to Google Drive").font(.subheadline.weight(.medium)); Text("Your projects can be synced to the cloud").font(.caption).foregroundStyle(.secondary) }
+                    Spacer()
+                }
+                .padding(12).background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.green.opacity(0.22)))
+                Menu("Upload Local Project") { ForEach(projectStore.projects) { project in Button(project.name) { Task { await drive.upload(project) } } } }.buttonStyle(CAWebButtonStyle(variant: .outline))
                 if drive.files.isEmpty && !drive.isLoading { Text("No cloud projects yet.").font(.caption).foregroundStyle(.secondary) }
                 ForEach(drive.files) { file in
-                    HStack { VStack(alignment: .leading) { Text(file.name); if let size = file.size { Text("\(size) bytes").font(.caption).foregroundStyle(.secondary) } }; Spacer(); Button("Download") { Task { await drive.download(file, into: projectStore) } }; Button(role: .destructive) { Task { await drive.delete(file) } } label: { Image(systemName: "trash") } }
-                        .padding(10).background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    HStack {
+                        VStack(alignment: .leading) { Text(file.name); if let size = file.size { Text("\(size) bytes").font(.caption).foregroundStyle(.secondary) } }
+                        Spacer()
+                        Button("Download") { Task { await drive.download(file, into: projectStore) } }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 32))
+                        Button(role: .destructive) { Task { await drive.delete(file) } } label: { Image(systemName: "trash") }
+                    }.padding(10).background(CATheme.muted(scheme).opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
                 }
-                Button("Sign Out from Google Drive") { drive.disconnect() }.buttonStyle(.bordered)
+                Button { drive.disconnect() } label: { Label("Sign out from Google Drive", systemImage: "cloud") }.buttonStyle(CAWebButtonStyle(variant: .outline))
             }
             if drive.isLoading { ProgressView() }
             if let message = drive.message { Text(message).font(.caption).foregroundStyle(.green) }
             if let error = drive.error { Text(error).font(.caption).foregroundStyle(.red) }
-        }.padding(20).caPanel()
+        }
+        .padding(24).background(CATheme.card(scheme), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).stroke(CATheme.border(scheme).opacity(0.8), lineWidth: 1) }
     }
+
+    private var accountOptions: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Account Options").font(.title3.bold())
+            Text("Manage your email, username, password, or delete your account.").font(.subheadline).foregroundStyle(.secondary)
+            NavigationLink("Manage Account") { AccountView() }.buttonStyle(CAWebButtonStyle(variant: .outline))
+            Button { Task { await auth.signOut(); dismiss() } } label: { Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") }.buttonStyle(CAWebButtonStyle(variant: .outline))
+        }
+        .padding(24).background(CATheme.card(scheme), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).stroke(CATheme.border(scheme).opacity(0.8), lineWidth: 1) }
+    }
+
+    private func statusTitle(_ status: String) -> String { status == "awaiting_review" ? "Awaiting Review" : status == "approved" ? "Published" : "Rejected" }
+    private func statusColor(_ status: String) -> Color { status == "awaiting_review" ? .orange : status == "approved" ? .green : .red }
 }
 
 struct SubmitWallpaperView: View {
@@ -164,8 +228,7 @@ struct ResetPasswordView: View {
                     SecureField("New password", text: $password)
                     SecureField("Confirm new password", text: $confirmation)
                     if let error = auth.error { Text(error).foregroundStyle(.red) }
-                    Button("Update password") { Task { if password == confirmation { _ = await auth.updatePassword(password) } else { auth.error = "Passwords do not match." } } }
-                        .disabled(password.isEmpty || confirmation.isEmpty)
+                    Button("Update password") { Task { if password == confirmation { _ = await auth.updatePassword(password) } else { auth.error = "Passwords do not match." } } }.disabled(password.isEmpty || confirmation.isEmpty)
                 }
             }.navigationTitle("Reset Password").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { auth.requiresPasswordReset = false } } }
         }

@@ -11,17 +11,39 @@ struct TermsOfServiceView: View {
 private struct LegalSection: Identifiable { let id = UUID(); let title: String; let body: String }
 
 private struct LegalDocumentView: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let title: String, updated: String, sections: [LegalSection]
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                Text(title).font(.system(size: 44, weight: .bold)); Text("Last Updated: \(updated)").font(.caption).foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 28) {
-                    ForEach(sections) { section in VStack(alignment: .leading, spacing: 10) { Text(section.title).font(.title2.bold()); Text(section.body).textSelection(.enabled).lineSpacing(5) } }
-                    Link("support@enkei64.xyz", destination: URL(string: "mailto:support@enkei64.xyz")!)
-                }.padding(24).caPanel()
-            }.frame(maxWidth: 800).padding(20)
-        }.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Text(title).font(.system(size: sizeClass == .compact ? 40 : 52, weight: .bold))
+                        Text("Last Updated: \(updated)").font(.caption).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 28) {
+                            ForEach(sections) { section in
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text(section.title).font(.title2.bold())
+                                    Text(section.body).textSelection(.enabled).lineSpacing(5)
+                                }
+                            }
+                            Link("support@enkei64.xyz", destination: URL(string: "mailto:support@enkei64.xyz")!)
+                        }
+                    }
+                    .frame(maxWidth: 896, alignment: .leading)
+                    .padding(.horizontal, sizeClass == .compact ? 16 : 24)
+                    .padding(.top, sizeClass == .compact ? 112 : 128)
+                    .padding(.bottom, 80)
+                    .frame(maxWidth: .infinity)
+                    CAWebsiteFooter()
+                }
+            }
+            .background(CATheme.background(scheme).ignoresSafeArea())
+            CAWebsiteNavigation().padding(.horizontal, sizeClass == .compact ? 16 : 24).padding(.top, 8)
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

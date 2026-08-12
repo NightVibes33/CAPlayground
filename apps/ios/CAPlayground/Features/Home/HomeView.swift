@@ -23,7 +23,7 @@ struct HomeView: View {
                         hero
                         layersSection
                         growingSection
-                        footer
+                        CAWebsiteFooter()
                     }
                 }
                 .background(CATheme.background(scheme).ignoresSafeArea())
@@ -117,11 +117,6 @@ struct HomeView: View {
     private func statistic(_ value: String, _ label: String) -> some View {
         VStack { Text(value).font(.system(size: 76, weight: .black)).foregroundStyle(CATheme.accent); Text(label).font(.title3.weight(.medium)).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 250) }
     }
-
-    private var footer: some View {
-        HStack { Text("CAPlayground").fontWeight(.bold); Spacer(); NavigationLink("Privacy") { PrivacyPolicyView() }; NavigationLink("Terms") { TermsOfServiceView() }; NavigationLink("Tendies Checker") { TendiesCheckerView() } }
-            .padding(24).overlay(alignment: .top) { Divider() }
-    }
 }
 
 private struct LayerPreview: View {
@@ -132,19 +127,15 @@ private struct LayerPreview: View {
             Color(red: 24 / 255, green: 24 / 255, blue: 27 / 255)
             switch kind {
             case .basic:
-                Circle().fill(Color(red: 82 / 255, green: 82 / 255, blue: 1)).frame(width: 96, height: 96).offset(x: 70, y: -70)
-                    .shadow(color: Color.blue.opacity(0.4), radius: 20)
-                RoundedRectangle(cornerRadius: 16).fill(Color(red: 1, green: 82 / 255, blue: 82 / 255)).frame(width: 128, height: 128)
-                    .rotationEffect(.degrees(animate ? 45 : 12)).shadow(color: Color.red.opacity(0.4), radius: 20)
+                Circle().fill(Color(red: 82 / 255, green: 82 / 255, blue: 1)).frame(width: 96, height: 96).offset(x: 70, y: -70).shadow(color: Color.blue.opacity(0.4), radius: 20)
+                RoundedRectangle(cornerRadius: 16).fill(Color(red: 1, green: 82 / 255, blue: 82 / 255)).frame(width: 128, height: 128).rotationEffect(.degrees(animate ? 45 : 12)).shadow(color: Color.red.opacity(0.4), radius: 20)
             case .gradient:
-                LinearGradient(colors: [.indigo, .purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .overlay { RadialGradient(colors: [.white.opacity(0.4), .clear], center: UnitPoint(x: 0.5, y: 1.2), startRadius: 0, endRadius: 260) }
+                LinearGradient(colors: [.indigo, .purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing).overlay { RadialGradient(colors: [.white.opacity(0.4), .clear], center: UnitPoint(x: 0.5, y: 1.2), startRadius: 0, endRadius: 260) }
             case .image:
                 Image("app-dark").resizable().scaledToFill().opacity(0.8)
             case .video:
                 Image("app-dark").resizable().scaledToFill().opacity(0.8)
-                Image(systemName: "pause.fill").font(.system(size: 14)).foregroundStyle(.white).padding(10)
-                    .background(.black.opacity(0.5), in: Circle()).overlay(Circle().stroke(.white.opacity(0.1))).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(16)
+                Image(systemName: "pause.fill").font(.system(size: 14)).foregroundStyle(.white).padding(10).background(.black.opacity(0.5), in: Circle()).overlay(Circle().stroke(.white.opacity(0.1))).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(16)
             case .emitter:
                 TimelineView(.animation) { context in
                     Canvas { graphics, size in
@@ -152,8 +143,7 @@ private struct LayerPreview: View {
                             let phase = context.date.timeIntervalSinceReferenceDate * 0.2 + Double(index) * 0.071
                             let x = CGFloat(Double(index * 83 % 101) / 100) * size.width
                             let y = CGFloat(phase.truncatingRemainder(dividingBy: 1.2) / 1.2) * (size.height + 50) - 25
-                            let rect = CGRect(x: x, y: y, width: 7, height: 7)
-                            graphics.stroke(Path(ellipseIn: rect), with: .color(.white.opacity(0.8)), lineWidth: 1.5)
+                            graphics.stroke(Path(ellipseIn: CGRect(x: x, y: y, width: 7, height: 7)), with: .color(.white.opacity(0.8)), lineWidth: 1.5)
                         }
                     }
                 }
@@ -168,7 +158,8 @@ private struct LayerPreview: View {
             case .liquidGlass:
                 Image("app-light").resizable().scaledToFill().overlay { RadialGradient(colors: [.yellow.opacity(0.5), .red.opacity(0.5), .purple.opacity(0.65)], center: .center, startRadius: 5, endRadius: 230) }
                 RoundedRectangle(cornerRadius: 24).fill(.ultraThinMaterial).frame(width: 192, height: 192).shadow(color: .black.opacity(0.5), radius: 25, y: 20)
-            default: Image(systemName: kind.symbol).font(.system(size: 76)).foregroundStyle(CATheme.accent)
+            default:
+                Image(systemName: kind.symbol).font(.system(size: 76)).foregroundStyle(CATheme.accent)
             }
         }
         .clipped()
