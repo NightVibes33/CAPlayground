@@ -1,0 +1,237 @@
+name: Apply Native Website Parity Corrections
+
+on:
+  push:
+    branches:
+      - agent/native-ios-conversion
+    paths:
+      - .github/workflows/native-parity-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Patch exact website behavior
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          projects = 'apps/ios/CAPlayground/Features/Projects/ProjectsView.swift'
+          replace_once(projects,
+              'importKind == .tendies ? [.tendies, .zip] : [.caArchive, .zip]',
+              'importKind == .tendies ? [.tendies] : [.caArchive, .zip]')
+
+          replace_once(projects,
+          '''            .confirmationDialog("Import Project", isPresented: $importDialogOpen, titleVisibility: .visible) {
+                Button("Import .ca / ZIP") { importKind = .ca; importFileOpen = true }
+                Button("Import .tendies") { importKind = .tendies; importFileOpen = true }
+                Button("Import from Link") { importLinkOpen = true }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Choose the same import source supported by the CAPlayground website.")
+            }''',
+          '''            .sheet(isPresented: $importDialogOpen) { importTypeDialog }''')
+
+          replace_once(projects,
+          '''            if importKind == .ca, let project = try? JSONDecoder().decode(CAProjectDocument.self, from: data) {
+                store.update(project)
+                path.append(project.id)
+                return
+            }
+''', '')
+
+          marker = '''    private var createProjectDialog: some View {'''
+          insert = '''    private var importTypeDialog: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Choose the type of file you want to import:")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Button {
+                    importDialogOpen = false; importKind = .ca; importFileOpen = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Import .ca file").fontWeight(.medium)
+                        Text("Import a CoreAnimation package or zip file").font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
+                }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 64))
+                Button {
+                    importDialogOpen = false; importKind = .tendies; importFileOpen = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Import .tendies file").fontWeight(.medium)
+                        Text("Import a tendies wallpaper file").font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
+                }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 64))
+                Button {
+                    importDialogOpen = false; importLinkOpen = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Import from link").fontWeight(.medium)
+                        Text("Paste a direct .tendies download URL").font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
+                }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 64))
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .navigationTitle("Import Project").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { importDialogOpen = false } } }
+        }.presentationDetents([.height(360)])
+    }
+
+'''
+          replace_once(projects, marker, insert + marker)
+
+          old_link = '''    private var importLinkDialog: some View {
+        NavigationStack {
+            Form {
+                Section("Wallpaper URL") {
+                    TextField("https://…/wallpaper.tendies", text: $importLinkURL)
+                        .textInputAutocapitalization(.never).keyboardType(.URL)
+                }
+                Section("Optional attribution") {
+                    TextField("Wallpaper name", text: $importLinkName)
+                    TextField("Creator", text: $importLinkCreator)
+                }
+                if importLinkBusy { ProgressView("Downloading and importing…") }
+            }
+            .navigationTitle("Import from Link")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { importLinkOpen = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Import") { Task { await importFromLink() } }
+                        .disabled(importLinkBusy || URL(string: importLinkURL.trimmingCharacters(in: .whitespacesAndNewlines)) == nil)
+                }
+            }
+        }.presentationDetents([.medium])
+    }'''
+          new_link = '''    private var importLinkDialog: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("https://.../wallpapers/your.tendies", text: $importLinkURL)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                } header: { Text(".tendies URL") }
+                Section {
+                    TextField("Imported Wallpaper", text: $importLinkName)
+                } header: { Text("Name") }
+                Section {
+                    TextField("Unknown", text: $importLinkCreator)
+                } header: { Text("Creator") }
+                if importLinkBusy { ProgressView() }
+            }
+            .navigationTitle("Import from Link")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { importLinkOpen = false }.disabled(importLinkBusy) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Import") { Task { await importFromLink() } }
+                        .disabled(importLinkBusy || importLinkURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }.presentationDetents([.medium])
+    }'''
+          replace_once(projects, old_link, new_link)
+
+          # Match website credit defaults for URL Tendies import.
+          old_credit = '''            if !importLinkCreator.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                project.documents[project.activeCA]?.camlHeaderComments = "Original wallpaper: \\(project.name)\\nCreated by: \\(importLinkCreator.trimmingCharacters(in: .whitespacesAndNewlines))\\nImported from URL"
+            }'''
+          new_credit = '''            let originalName = importLinkName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Imported Wallpaper" : importLinkName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let creator = importLinkCreator.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Unknown" : importLinkCreator.trimmingCharacters(in: .whitespacesAndNewlines)
+            project.documents[project.activeCA]?.camlHeaderComments = "Original wallpaper: \\(originalName)\\nCreated by: \\(creator)\\nImported from URL"'''
+          replace_once(projects, old_credit, new_credit)
+
+          editor = 'apps/ios/CAPlayground/Features/Editor/EditorView.swift'
+          replace_once(editor,
+              'AddLayerMenu(project: $project, selectedID: $selectedID)\n            .frame(width: 40, height: 40)',
+              'AddLayerMenu(project: $project, selectedID: $selectedID, mobileMode: true)\n            .frame(width: 40, height: 40)')
+
+          replace_once(editor,
+          '''        Menu {
+            Button("Base State") { project.activeState = "Base State" }
+            ForEach(project.states, id: \\.self) { state in Button(state) { project.activeState = state } }
+        } label: { Image(systemName: "circle.circle").frame(width: 40, height: 40) }''',
+          '''        Menu {
+            Button("Base State") { project.activeState = "Base State" }
+            ForEach(["Locked", "Unlock", "Sleep"].filter { project.states.contains($0) }, id: \\.self) { state in
+                Button(state) { project.activeState = state }
+            }
+        } label: { Image(systemName: "circle.circle").frame(width: 40, height: 40) }''')
+
+          replace_once(editor, 'shortcut("Pan", "Shift + Drag or two-finger drag")', 'shortcut("Pan", "Shift + Drag or Middle Click")')
+          replace_once(editor, 'shortcut("Resize from Center", "Option + Drag Handle")', 'shortcut("Resize from Center", "Alt + Drag Handle")')
+
+          layer = 'apps/ios/CAPlayground/Features/Editor/LayerPanel.swift'
+          replace_once(layer,
+          '''struct AddLayerMenu: View {
+    @Binding var project: CAProjectDocument
+    @Binding var selectedID: UUID?
+    @State private var imageImporterOpen = false''',
+          '''struct AddLayerMenu: View {
+    @Binding var project: CAProjectDocument
+    @Binding var selectedID: UUID?
+    var mobileMode = false
+    @State private var imageImporterOpen = false''')
+          replace_once(layer,
+          '''                Button("Emitter Layer") { add(.emitter) }; Button("Replicator Layer") { add(.replicator) }
+                if project.gyroEnabled { Button("Transform Layer") { add(.transform) } }
+                Button("Liquid Glass Layer") { add(.liquidGlass) }''',
+          '''                Button("Emitter Layer") { add(.emitter) }
+                if !mobileMode { Button("Replicator Layer") { add(.replicator) } }
+                if project.gyroEnabled { Button("Transform Layer") { add(.transform) } }
+                if !mobileMode { Button("Liquid Glass Layer") { add(.liquidGlass) } }''')
+
+          video = 'apps/ios/CAPlayground/Features/Editor/VideoLayerDialog.swift'
+          old_gif = '''    private static func extractGIF(url: URL, quality: Double, maxDuration: Double, useWebP: Bool) throws -> Result {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetCount(source) > 0 else { throw CocoaError(.fileReadCorruptFile) }
+        var frames: [Data] = []; var width = 0; var height = 0; var duration = 0.0
+        for index in 0..<CGImageSourceGetCount(source) {
+            guard let image = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any], gif = properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+            let delay = gif?[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? gif?[kCGImagePropertyGIFDelayTime] as? Double ?? (1.0 / 15.0)
+            if duration + delay > maxDuration { break }
+            width = image.width; height = image.height; frames.append(try encode(image, quality: quality, webP: useWebP)); duration += delay
+        }
+        return Result(frames: frames, frameExtension: useWebP ? ".webp" : ".jpg", width: width, height: height, duration: duration)
+    }'''
+          new_gif = '''    private static func extractGIF(url: URL, quality: Double, maxDuration: Double, useWebP: Bool) throws -> Result {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetCount(source) > 0 else { throw CocoaError(.fileReadCorruptFile) }
+        let assumedFPS = 15.0
+        let maxFrames = min(CGImageSourceGetCount(source), Int(floor(maxDuration * assumedFPS)))
+        var frames: [Data] = []; var width = 0; var height = 0
+        for index in 0..<maxFrames {
+            guard let image = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
+            width = image.width; height = image.height
+            frames.append(try encode(image, quality: quality, webP: useWebP))
+        }
+        let duration = frames.isEmpty ? 0 : Double(frames.count) / assumedFPS
+        return Result(frames: frames, frameExtension: useWebP ? ".webp" : ".jpg", width: width, height: height, duration: duration)
+    }'''
+          replace_once(video, old_gif, new_gif)
+
+          workflow = Path('.github/workflows/native-parity-patch.yml')
+          workflow.unlink()
+          PY
+      - name: Commit parity corrections
+        run: |
+          git config user.name "CAPlayground Parity Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Match project import and mobile editor behavior to website"
+          git push origin HEAD:agent/native-ios-conversion
