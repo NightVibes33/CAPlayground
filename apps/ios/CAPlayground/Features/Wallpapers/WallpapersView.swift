@@ -102,7 +102,8 @@ struct WallpapersView: View {
     }
 
     var body: some View {
-        ScrollView {
+        ZStack(alignment: .top) {
+          ScrollView {
             VStack(spacing: 32) {
                 VStack(spacing: 12) {
                     Text("Wallpaper Gallery")
@@ -132,11 +133,12 @@ struct WallpapersView: View {
             }
             .frame(maxWidth: 1120)
             .padding(.horizontal, 24)
-            .padding(.vertical, 64)
+            .padding(.top, 96).padding(.bottom, 64)
             .frame(maxWidth: .infinity)
+          }
+          CAWebsiteNavigation().padding(.horizontal, 16).padding(.top, 8)
         }
-        .navigationTitle("Wallpapers")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(item: $selected) { item in detail(item) }
         .fullScreenCover(item: $importedProject) { project in
             EditorView(initialProject: project)
