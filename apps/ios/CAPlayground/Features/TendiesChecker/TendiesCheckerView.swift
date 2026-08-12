@@ -104,4 +104,3 @@ private struct TendiesDocumentAnalysis: Identifiable {
 }
 
 private extension String { func matches(_ pattern: String) -> Int { (try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]).numberOfMatches(in: self, range: NSRange(startIndex..., in: self))) ?? 0 } }
-private extension LayerModel { func flattened() -> [LayerModel] { [self] + children.flatMap { $0.flattened() } } }
