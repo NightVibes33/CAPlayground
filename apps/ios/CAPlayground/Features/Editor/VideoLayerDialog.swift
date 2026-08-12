@@ -130,7 +130,9 @@ struct VideoLayerDialog: View {
         let rawBase = URL(fileURLWithPath: sourceName).deletingPathExtension().lastPathComponent
         let safeBase = rawBase.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
         let prefix = "\(safeBase.isEmpty ? "Video_Layer" : safeBase)_"
-        for (index, data) in frames.enumerated() { project.assets["\(prefix)\(index).jpg"] = data }
+        for (index, data) in frames.enumerated() {
+            project.setAsset(data, named: "\(prefix)\(index).jpg", in: project.activeCA)
+        }
         let id = UUID()
         var layer = LayerModel(
             id: id, name: nextName(sourceName.isEmpty ? "Video Layer" : sourceName), kind: .video,
