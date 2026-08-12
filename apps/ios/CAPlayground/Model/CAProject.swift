@@ -203,6 +203,7 @@ struct KeyframeAnimationModel: Codable, Hashable, Identifiable {
     var enabled = true
     var keyPath: String
     var numericValues: [Double]
+    var values: [AnimationValue]? = nil
     var keyTimes: [Double]
     var duration: Double
     var autoreverses = false
@@ -211,6 +212,14 @@ struct KeyframeAnimationModel: Codable, Hashable, Identifiable {
     var timingFunction = "linear"
     var repeatDurationSeconds: Double?
     var speed = 1.0
+}
+
+enum AnimationValue: Codable, Hashable {
+    case number(Double)
+    case point(Vector2)
+    case size(LayerSize)
+    case color(String)
+    case colors([GradientStop])
 }
 
 struct LayerModel: Codable, Identifiable, Hashable {
@@ -346,4 +355,5 @@ struct SpringAnimationModel: Codable, Hashable {
     var duration: Double?
     var fillMode: String?
     var keyPath: String?
+    var micaAutorecalculatesDuration: Bool?
 }
