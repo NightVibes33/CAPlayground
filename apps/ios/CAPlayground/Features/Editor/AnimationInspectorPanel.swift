@@ -147,7 +147,7 @@ private struct WebsiteAnimationItem: View {
                 do {
                     bulkText = try String(contentsOf: url, encoding: .utf8)
                     bulkFileName = url.lastPathComponent
-                    bulkError = parseBulkText(bulkText, keyPath: animation.keyPath).error
+                    bulkError = parseBulk(bulkText, keyPath: animation.keyPath).error
                 } catch {
                     bulkError = error.localizedDescription
                 }
