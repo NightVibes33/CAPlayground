@@ -80,7 +80,7 @@ struct DashboardView: View {
     }
 }
 
-private struct SubmitWallpaperView: View {
+struct SubmitWallpaperView: View {
     private enum Step { case form, preview, rules, submitting, success }
     @Environment(AuthStore.self) private var auth
     @Environment(\.dismiss) private var dismiss
