@@ -59,7 +59,7 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         return root
     }
 
-    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributes: [String: String] = [:]) {
+    func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes: [String: String] = [:]) {
         if elementName == "CGImage", let src = attributes["src"], !stack.isEmpty {
             stack[stack.count - 1].layer.imageName = URL(fileURLWithPath: src).lastPathComponent
             return

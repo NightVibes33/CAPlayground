@@ -330,7 +330,7 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
             let (data, response) = try await request(path: path, token: token)
             guard response.statusCode == 200 else { return }
             let rows = try JSONDecoder().decode([[String: String?]].self, from: data)
-            username = rows.first?["username"] ?? ""
+            username = rows.first.flatMap { $0["username"] ?? nil } ?? ""
         } catch { }
     }
 
