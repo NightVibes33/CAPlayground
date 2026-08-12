@@ -333,11 +333,11 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         guard valid, !layerStack.isEmpty else { return false }
         let type = attributes["type"] ?? elementName
         guard type == "CAKeyframeAnimation" || elementName == "CAKeyframeAnimation" else { return false }
-        let repeatCount = attributes["repeatCount"]
-        let repeatDuration = attributes["repeatDuration"]
-        let repeats = [repeatCount, repeatDuration].contains { value in
-            value == "inf" || value == "infinity"
-        }
+        let repeatCount = attributes["repeatCount"]?.lowercased()
+        let repeatDuration = attributes["repeatDuration"]?.lowercased()
+        let repeatCountIsInfinite = repeatCount == "inf" || repeatCount == "infinity"
+        let repeatDurationIsInfinite = repeatDuration == "inf" || repeatDuration == "infinity"
+        let repeats = repeatCountIsInfinite || repeatDurationIsInfinite
         currentAnimation = .init(
             keyPath: attributes["keyPath"] ?? "position",
             duration: number(attributes["duration"]) ?? 1,
