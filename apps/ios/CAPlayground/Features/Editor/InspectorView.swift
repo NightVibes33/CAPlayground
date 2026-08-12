@@ -126,6 +126,12 @@ struct InspectorView: View {
         Slider(value: value(\.backgroundOpacity, layer.backgroundOpacity), in: 0...1)
         colorField("Border colour", layer.borderColor ?? "#000000", \.borderColor)
         field("Border width", layer.borderWidth, \.borderWidth)
+        if layer.kind == .shape {
+            Picker("Shape", selection: optionalString(\.shape, layer.shape ?? "rect")) { Text("Rectangle").tag("rect"); Text("Circle").tag("circle"); Text("Rounded Rectangle").tag("rounded-rect") }
+            colorField("Fill", layer.fillColor ?? "#FFFFFF", \.fillColor); colorField("Stroke", layer.strokeColor ?? "#000000", \.strokeColor)
+            optionalField("Stroke Width", layer.strokeWidth ?? 0, \.strokeWidth)
+            if layer.shape == "rounded-rect" { field("Radius", layer.cornerRadius, \.cornerRadius) }
+        }
     }
 
     @ViewBuilder private func text(_ layer: LayerModel) -> some View {
@@ -166,6 +172,12 @@ struct InspectorView: View {
         Picker("Calculation Mode", selection: optionalString(\.calculationMode, layer.calculationMode ?? "linear")) { Text("Linear").tag("linear"); Text("Discrete").tag("discrete") }
         Toggle("Auto Reverses", isOn: optionalBool(\.autoReverses, layer.autoReverses ?? false))
         Toggle("Sync with state transition", isOn: optionalBool(\.syncWithState, layer.syncWithState ?? false))
+        optionalIntegerField("Current Frame", layer.currentFrameIndex ?? 0, \.currentFrameIndex)
+        if layer.syncWithState ?? false {
+            ForEach(["Locked", "Unlock", "Sleep"], id: \.self) { state in
+                Picker("\(state) Frame", selection: syncFrameBinding(state, layer.syncStateFrameMode?[state] ?? "beginning")) { Text("Beginning").tag("beginning"); Text("End").tag("end") }
+            }
+        }
     }
 
     @ViewBuilder private func animations(_ layer: LayerModel) -> some View {
@@ -174,6 +186,10 @@ struct InspectorView: View {
             DisclosureGroup(animation.keyPath) {
                 Toggle("Enabled", isOn: animationBinding(animation.id, \.enabled, animation.enabled))
                 animationField("Duration (s)", animation.id, \.duration, animation.duration)
+                animationField("Speed", animation.id, \.speed, animation.speed)
+                optionalAnimationField("Repeat Duration (s)", animation.id, \.repeatDurationSeconds, animation.repeatDurationSeconds ?? 0)
+                TextField("Values (comma separated)", text: numericArrayBinding(animation.id, \.numericValues, animation.numericValues)).textFieldStyle(.roundedBorder)
+                TextField("Key Times (comma separated)", text: numericArrayBinding(animation.id, \.keyTimes, animation.keyTimes)).textFieldStyle(.roundedBorder)
                 Toggle("Loop", isOn: animationBinding(animation.id, \.repeats, animation.repeats))
                 Toggle("Autoreverse", isOn: animationBinding(animation.id, \.autoreverses, animation.autoreverses))
                 Picker("Calculation Mode", selection: animationBinding(animation.id, \.calculationMode, animation.calculationMode)) { Text("Linear").tag("linear"); Text("Discrete").tag("discrete") }
@@ -187,7 +203,15 @@ struct InspectorView: View {
         Text("Configure how this layer responds to device tilt. You can add up to 10 dictionaries.").font(.caption).foregroundStyle(.secondary)
         Button("Add Gyro Dictionary", systemImage: "plus") { update { if ($0.gyroDictionaries?.count ?? 0) < 10 { $0.gyroDictionaries = ($0.gyroDictionaries ?? []) + [.init(layerName: $0.name)] } } }
         ForEach(layer.gyroDictionaries ?? []) { dictionary in
-            VStack { Text(dictionary.title).fontWeight(.medium); LabeledContent("Axis", value: dictionary.axis.uppercased()); LabeledContent("Key Path", value: dictionary.keyPath); LabeledContent("Range", value: "\(dictionary.mapMinTo) … \(dictionary.mapMaxTo)") }.padding(10).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+            DisclosureGroup(dictionary.title) {
+                Picker("Axis", selection: gyroBinding(dictionary.id, \.axis, dictionary.axis)) { Text("X").tag("x"); Text("Y").tag("y") }
+                TextField("Title", text: gyroBinding(dictionary.id, \.title, dictionary.title)).textFieldStyle(.roundedBorder)
+                TextField("Layer Name", text: gyroBinding(dictionary.id, \.layerName, dictionary.layerName)).textFieldStyle(.roundedBorder)
+                TextField("Key Path", text: gyroBinding(dictionary.id, \.keyPath, dictionary.keyPath)).textFieldStyle(.roundedBorder)
+                LabeledContent("Map Minimum") { TextField("Minimum", value: gyroBinding(dictionary.id, \.mapMinTo, dictionary.mapMinTo), format: .number).textFieldStyle(.roundedBorder) }
+                LabeledContent("Map Maximum") { TextField("Maximum", value: gyroBinding(dictionary.id, \.mapMaxTo, dictionary.mapMaxTo), format: .number).textFieldStyle(.roundedBorder) }
+                Button("Remove", role: .destructive) { update { $0.gyroDictionaries?.removeAll { $0.id == dictionary.id } } }
+            }.padding(10).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
         }
     }
 
@@ -198,7 +222,17 @@ struct InspectorView: View {
         Picker("Shape", selection: optionalString(\.emitterShape, layer.emitterShape ?? "point")) { Text("point").tag("point"); Text("line").tag("line"); Text("rectangle").tag("rectangle") }
         Picker("Mode", selection: optionalString(\.emitterMode, layer.emitterMode ?? "volume")) { Text("volume").tag("volume"); Text("outline").tag("outline"); Text("surface").tag("surface") }
         HStack { Text("Cells").fontWeight(.medium); Spacer(); Button("Add", systemImage: "plus") { update { $0.emitterCells = ($0.emitterCells ?? []) + [.init()] } } }
-        ForEach(layer.emitterCells ?? []) { cell in LabeledContent(cell.name, value: "Birth \(cell.birthRate.formatted()) · Life \(cell.lifetime.formatted())") }
+        ForEach(layer.emitterCells ?? []) { cell in
+            DisclosureGroup(cell.name) {
+                TextField("Name", text: emitterBinding(cell.id, \.name, cell.name)).textFieldStyle(.roundedBorder)
+                emitterField("Birth Rate", cell, \.birthRate); emitterField("Lifetime", cell, \.lifetime); emitterField("Lifetime Range", cell, \.lifetimeRange)
+                emitterField("Velocity", cell, \.velocity); emitterField("Velocity Range", cell, \.velocityRange); emitterField("Emission Longitude", cell, \.emissionLongitude)
+                emitterField("Emission Latitude", cell, \.emissionLatitude); emitterField("Emission Range", cell, \.emissionRange); emitterField("Scale", cell, \.scale); emitterField("Scale Range", cell, \.scaleRange); emitterField("Scale Speed", cell, \.scaleSpeed)
+                emitterField("Alpha Range", cell, \.alphaRange); emitterField("Alpha Speed", cell, \.alphaSpeed); emitterField("Spin", cell, \.spin); emitterField("Spin Range", cell, \.spinRange)
+                emitterField("X Acceleration", cell, \.xAcceleration); emitterField("Y Acceleration", cell, \.yAcceleration)
+                Button("Remove Cell", role: .destructive) { update { $0.emitterCells?.removeAll { $0.id == cell.id } } }
+            }.padding(10).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+        }
     }
 
     @ViewBuilder private func replicator(_ layer: LayerModel) -> some View {
@@ -264,6 +298,12 @@ struct InspectorView: View {
     private func sizeEditor(_ title: String, keyPath: WritableKeyPath<LayerModel, LayerSize?>, size: LayerSize) -> some View { VStack(alignment: .leading) { Text(title).font(.caption).foregroundStyle(.secondary); HStack { TextField("Width", value: Binding(get: { size.width }, set: { v in update { var s = $0[keyPath: keyPath] ?? size; s.width = v; $0[keyPath: keyPath] = s } }), format: .number).textFieldStyle(.roundedBorder); TextField("Height", value: Binding(get: { size.height }, set: { v in update { var s = $0[keyPath: keyPath] ?? size; s.height = v; $0[keyPath: keyPath] = s } }), format: .number).textFieldStyle(.roundedBorder) } } }
     private func animationBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.animations.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { new in update { layer in if let i = layer.animations.firstIndex(where: { $0.id == id }) { layer.animations[i][keyPath: keyPath] = new } } }) }
     private func animationField(_ title: String, _ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, Double>, _ fallback: Double) -> some View { LabeledContent(title) { TextField(title, value: animationBinding(id, keyPath, fallback), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
+    private func optionalAnimationField(_ title: String, _ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, Double?>, _ fallback: Double) -> some View { LabeledContent(title) { TextField(title, value: Binding(get: { selected?.animations.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { value in update { layer in if let index = layer.animations.firstIndex(where: { $0.id == id }) { layer.animations[index][keyPath: keyPath] = value } } }), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
+    private func numericArrayBinding(_ id: UUID, _ keyPath: WritableKeyPath<KeyframeAnimationModel, [Double]>, _ fallback: [Double]) -> Binding<String> { Binding(get: { (selected?.animations.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback).map { $0.formatted() }.joined(separator: ", ") }, set: { text in let values = text.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }; update { layer in if let index = layer.animations.firstIndex(where: { $0.id == id }), !values.isEmpty { layer.animations[index][keyPath: keyPath] = values } } }) }
+    private func gyroBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<GyroDictionaryModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.gyroDictionaries?.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { value in update { layer in if let index = layer.gyroDictionaries?.firstIndex(where: { $0.id == id }) { layer.gyroDictionaries?[index][keyPath: keyPath] = value } } }) }
+    private func emitterBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<EmitterCellModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.emitterCells?.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { value in update { layer in if let index = layer.emitterCells?.firstIndex(where: { $0.id == id }) { layer.emitterCells?[index][keyPath: keyPath] = value } } }) }
+    private func emitterField(_ title: String, _ cell: EmitterCellModel, _ keyPath: WritableKeyPath<EmitterCellModel, Double>) -> some View { LabeledContent(title) { TextField(title, value: emitterBinding(cell.id, keyPath, cell[keyPath: keyPath]), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
+    private func syncFrameBinding(_ state: String, _ fallback: String) -> Binding<String> { Binding(get: { selected?.syncStateFrameMode?[state] ?? fallback }, set: { value in update { var modes = $0.syncStateFrameMode ?? [:]; modes[state] = value; $0.syncStateFrameMode = modes } }) }
     private func filterBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<FilterModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.filters.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { new in update { layer in if let i = layer.filters.firstIndex(where: { $0.id == id }) { layer.filters[i][keyPath: keyPath] = new } } }) }
 
     private func stateKey<T>(for keyPath: WritableKeyPath<LayerModel, T>) -> String? {
