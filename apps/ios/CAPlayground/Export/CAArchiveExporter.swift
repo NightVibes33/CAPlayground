@@ -47,10 +47,16 @@ enum CAArchiveExporter {
         if project.gyroEnabled, let doc = project.documents[.wallpaper] { return bundleEntries(doc: doc, project: project, kind: .wallpaper, prefix: "Wallpaper.ca") }
         return [CADocumentKind.background, .floating].flatMap { kind in project.documents[kind].map { bundleEntries(doc: $0, project: project, kind: kind, prefix: "\(kind.title).ca") } ?? [] }
     }
+
     private static func bundleEntries(doc: AnimationDocument, project: CAProjectDocument, kind: CADocumentKind, prefix: String) -> [ZIPEntry] {
-        var entries: [ZIPEntry] = [.init(path: "\(prefix)/main.caml", data: Data(CAMLSerializer.serialize(project: project, document: doc, kind: kind).utf8)), .init(path: "\(prefix)/index.xml", data: Data(indexXML.utf8)), .init(path: "\(prefix)/assetManifest.caml", data: Data(manifest.utf8))]
-        entries += project.assets.map { name, data in .init(path: "\(prefix)/assets/\(name)", data: data) }
+        var entries: [ZIPEntry] = [
+            .init(path: "\(prefix)/main.caml", data: Data(CAMLSerializer.serialize(project: project, document: doc, kind: kind).utf8)),
+            .init(path: "\(prefix)/index.xml", data: Data(indexXML.utf8)),
+            .init(path: "\(prefix)/assetManifest.caml", data: Data(manifest.utf8))
+        ]
+        entries += project.assets(for: kind).map { name, data in .init(path: "\(prefix)/assets/\(name)", data: data) }
         return entries
     }
+
     private static func licenseText(_ license: CAExportLicense) -> String? { license == .none ? nil : "Creative Commons \(license.rawValue)\nSee https://creativecommons.org/licenses/" }
 }
