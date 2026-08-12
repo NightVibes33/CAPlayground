@@ -406,8 +406,10 @@ struct SubmitWallpaperView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) { content }
-                    .padding(20)
+                VStack(alignment: .leading, spacing: 20) {
+                    if auth.user == nil { signInRequiredContent } else { content }
+                }
+                .padding(20)
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
@@ -428,6 +430,22 @@ struct SubmitWallpaperView: View {
             allowsMultipleSelection: false
         ) { load($0, videoFile: true) }
         .onDisappear { removePreviewFile() }
+    }
+
+    private var signInRequiredContent: some View {
+        VStack(spacing: 16) {
+            Text("Sign In Required").font(.title2.weight(.semibold))
+            Text("You need to be signed in to submit wallpapers")
+                .foregroundStyle(.secondary)
+            Text("Please sign in to your account to submit wallpapers to the gallery.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            NavigationLink("Sign In") { SignInView() }
+                .buttonStyle(CAWebButtonStyle(variant: .accent))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
     }
 
     private var title: String {

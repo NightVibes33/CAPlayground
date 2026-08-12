@@ -205,15 +205,9 @@ struct WallpapersView: View {
 
     private var controls: some View {
         VStack(spacing: 12) {
-            if auth.isSignedIn {
-                Button { showingSubmission = true } label: {
-                    Label("Submit Wallpaper", systemImage: "square.and.arrow.up")
-                }.buttonStyle(CAWebButtonStyle(variant: .accent))
-            } else {
-                NavigationLink { SignInView() } label: {
-                    Label("Submit Wallpaper", systemImage: "square.and.arrow.up")
-                }.buttonStyle(CAWebButtonStyle(variant: .accent))
-            }
+            Button { showingSubmission = true } label: {
+                Label("Submit Wallpaper", systemImage: "square.and.arrow.up")
+            }.buttonStyle(CAWebButtonStyle(variant: .accent))
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { searchField; sortPicker }
