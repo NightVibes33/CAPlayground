@@ -86,10 +86,32 @@ enum CAMLSerializer {
     private static func animations(_ animations: [KeyframeAnimationModel], indent: Int) -> String {
         let pad = String(repeating: "  ", count: indent)
         return "\n\(pad)<animations>" + animations.filter(\.enabled).map { animation in
-            let values = animation.numericValues.map(number).joined(separator: " ")
-            let times = animation.keyTimes.map(number).joined(separator: " ")
-            return "\n\(pad)  <CAKeyframeAnimation keyPath=\"\(escape(animation.keyPath))\" duration=\"\(number(animation.duration))\" speed=\"\(number(animation.speed))\" values=\"\(values)\" keyTimes=\"\(times)\" repeatCount=\"\(animation.repeats ? "inf" : "0")\" repeatDuration=\"\(animation.repeats ? "inf" : number(animation.repeatDurationSeconds ?? animation.duration))\" autoreverses=\"\(animation.autoreverses ? "1" : "0")\" calculationMode=\"\(animation.calculationMode)\" timingFunction=\"\(escape(animation.timingFunction))\"/>"
+            let values = animation.values ?? animation.numericValues.map(AnimationValue.number)
+            let times = animation.keyTimes.enumerated().map { index, value in "\n\(pad)      <real value=\"\(number(index == 0 ? 0 : value))\"/>" }.joined()
+            let finalTime = animation.calculationMode == "discrete" && animation.keyTimes.count == values.count ? "\n\(pad)      <real value=\"1\"/>" : ""
+            let encodedValues = values.map { animationValue($0, keyPath: animation.keyPath, indent: indent + 3) }.joined()
+            let repeatAttributes = animation.repeats ? " repeatCount=\"inf\" repeatDuration=\"inf\"" : " repeatDuration=\"\(number(animation.repeatDurationSeconds ?? animation.duration))\""
+            return "\n\(pad)  <CAKeyframeAnimation keyPath=\"\(escape(animation.keyPath))\" duration=\"\(number(animation.duration))\" speed=\"\(number(animation.speed))\" removedOnCompletion=\"0\"\(repeatAttributes) autoreverses=\"\(animation.autoreverses ? "1" : "0")\" calculationMode=\"\(animation.calculationMode)\" timingFunction=\"\(escape(animation.timingFunction))\">\n\(pad)    <keyTimes>\(times)\(finalTime)\n\(pad)    </keyTimes>\n\(pad)    <values>\(encodedValues)\n\(pad)    </values>\n\(pad)  </CAKeyframeAnimation>"
         }.joined() + "\n\(pad)</animations>"
+    }
+
+    private static func animationValue(_ value: AnimationValue, keyPath: String, indent: Int) -> String {
+        let pad = String(repeating: "  ", count: indent)
+        switch value {
+        case .number(let raw):
+            let converted = keyPath.hasPrefix("transform.rotation") ? raw * .pi / 180 : raw
+            let tag = keyPath == "position.x" || keyPath == "position.y" ? "integer" : "real"
+            return "\n\(pad)<\(tag) value=\"\(number((tag == "integer" ? converted.rounded() : converted)))\"/>"
+        case .point(let point):
+            return "\n\(pad)<CGPoint value=\"\(number(point.x.rounded())) \(number(point.y.rounded()))\"/>"
+        case .size(let size):
+            return "\n\(pad)<CGRect value=\"0 0 \(number(size.width.rounded())) \(number(size.height.rounded()))\"/>"
+        case .color(let hex):
+            return "\n\(pad)<CGColor value=\"\(color(hex) ?? "1 1 1")\"/>"
+        case .colors(let stops):
+            let colors = stops.map { stop in "\n\(pad)  <CGColor value=\"\(color(stop.color) ?? "1 1 1")\"\(stop.opacity < 1 ? " opacity=\"\(number((stop.opacity * 100).rounded() / 100))\"" : "")/>" }.joined()
+            return "\n\(pad)<NSArray>\(colors)\n\(pad)</NSArray>"
+        }
     }
 
     private static func states(_ document: AnimationDocument, root: LayerModel) -> String {
@@ -105,7 +127,12 @@ enum CAMLSerializer {
         let transitionXML = document.stateTransitions.map { transition in
             let elements = transition.elements.map { element in
                 guard let spring = element.animation else { return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"/>" }
-                return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"><animation type=\"CASpringAnimation\" damping=\"\(number(spring.damping))\" mass=\"\(number(spring.mass))\" stiffness=\"\(number(spring.stiffness))\" velocity=\"\(number(spring.initialVelocity))\"/></LKStateTransitionElement>"
+                var attributes = "type=\"\(escape(spring.type))\" damping=\"\(number(spring.damping))\" mass=\"\(number(spring.mass))\" stiffness=\"\(number(spring.stiffness))\" velocity=\"\(number(spring.initialVelocity))\""
+                if let duration = spring.duration { attributes += " duration=\"\(number(duration))\"" }
+                if let fillMode = spring.fillMode { attributes += " fillMode=\"\(escape(fillMode))\"" }
+                if let keyPath = spring.keyPath { attributes += " keyPath=\"\(escape(keyPath))\"" }
+                if let recalculates = spring.micaAutorecalculatesDuration { attributes += " mica_autorecalculatesDuration=\"\(recalculates ? "1" : "0")\"" }
+                return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"><animation \(attributes)/></LKStateTransitionElement>"
             }.joined(separator: "\n")
             return "    <LKStateTransition fromState=\"\(escape(transition.fromState))\" toState=\"\(escape(transition.toState))\"><elements>\n\(elements)\n      </elements></LKStateTransition>"
         }.joined(separator: "\n")
