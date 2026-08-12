@@ -1,0 +1,56 @@
+name: Restore Layer Panel Parity
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/restore-layer-parity.yml]
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Restore last-green layer panel and apply mobile-only delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show f3a5153933976768323d689918a474e11580142e:apps/ios/CAPlayground/Features/Editor/LayerPanel.swift > apps/ios/CAPlayground/Features/Editor/LayerPanel.swift
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('apps/ios/CAPlayground/Features/Editor/LayerPanel.swift')
+          s = p.read_text()
+          old = '''struct AddLayerMenu: View {
+              @Binding var project: CAProjectDocument
+              @Binding var selectedID: UUID?
+              @State private var imageImporterOpen = false'''
+          new = '''struct AddLayerMenu: View {
+              @Binding var project: CAProjectDocument
+              @Binding var selectedID: UUID?
+              var mobileMode = false
+              @State private var imageImporterOpen = false'''
+          if s.count(old) != 1:
+              raise SystemExit('AddLayerMenu declaration mismatch')
+          s = s.replace(old, new, 1)
+          old = '''                Button("Emitter Layer") { add(.emitter) }; Button("Replicator Layer") { add(.replicator) }
+                          if project.gyroEnabled { Button("Transform Layer") { add(.transform) } }
+                          Button("Liquid Glass Layer") { add(.liquidGlass) }'''
+          new = '''                Button("Emitter Layer") { add(.emitter) }
+                          if !mobileMode { Button("Replicator Layer") { add(.replicator) } }
+                          if project.gyroEnabled { Button("Transform Layer") { add(.transform) } }
+                          if !mobileMode { Button("Liquid Glass Layer") { add(.liquidGlass) } }'''
+          if s.count(old) != 1:
+              raise SystemExit('Add Layer menu mismatch')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          Path('.github/workflows/restore-layer-parity.yml').unlink()
+          PY
+      - name: Commit restored parity
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Restore full layer panel parity and mobile layer menu'
+          git push origin HEAD:agent/native-ios-conversion
