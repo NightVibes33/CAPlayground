@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { sealDriveSession } from '../mobile-session';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
@@ -43,6 +44,13 @@ export async function GET(request: NextRequest) {
     }
 
     const nowExpiry = tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : undefined;
+    if (state?.startsWith('native:')) {
+      const session = sealDriveSession({ accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresAt: nowExpiry });
+      const callback = new URL('caplayground://drive/callback');
+      callback.searchParams.set('session', session);
+      callback.searchParams.set('state', state.slice(7));
+      return NextResponse.redirect(callback);
+    }
     
     const response = NextResponse.redirect(`${origin}/dashboard?drive_connected=true`);
     
