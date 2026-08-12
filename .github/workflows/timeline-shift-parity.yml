@@ -17,6 +17,7 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
+          from textwrap import dedent
           p=Path('apps/ios/CAPlayground/Features/Editor/WebsiteTimelinePanel.swift')
           s=p.read_text()
           def one(old,new):
@@ -28,92 +29,95 @@ jobs:
           one('        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))\n    }\n','        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))\n        .background(TimelineModifierCapture(isShiftDown: $shiftDown).frame(width: 0, height: 0))\n    }\n')
           one('                color: animationColor(animation.keyPath)\n            )','                color: animationColor(animation.keyPath),\n                shiftDown: shiftDown\n            )')
           one('    let color: Color\n\n    @State private var localDuration','    let color: Color\n    let shiftDown: Bool\n\n    @State private var localDuration')
-          old='''    private func resizeGesture(_ animation: KeyframeAnimationModel) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if localDuration == nil {
-                    startDuration = animation.duration
-                    localDuration = animation.duration
-                }
-                let speed = animation.speed
-                let deltaEffective = Double(value.translation.width / max(pxPerSecond, 0.0001))
-                let delta = deltaEffective * speed
-                localDuration = (max(0.1, startDuration + delta) * 10).rounded() / 10
-            }
-            .onEnded { _ in
-                let final = localDuration ?? animation.duration
-                project.root.update(id: layerID) { layer in
-                    guard let index = layer.animations.firstIndex(where: { $0.id == animationID }) else { return }
-                    layer.animations[index].duration = final
-                }
-                localDuration = nil
-            }
-    }
-'''
-          new='''    private func resizeGesture(_ animation: KeyframeAnimationModel) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if localDuration == nil {
-                    startDuration = animation.duration
-                    localDuration = animation.duration
-                }
-                localDuration = calculatedDuration(animation, translation: value.translation.width)
-            }
-            .onEnded { value in
-                let final = calculatedDuration(animation, translation: value.translation.width)
-                project.root.update(id: layerID) { layer in
-                    guard let index = layer.animations.firstIndex(where: { $0.id == animationID }) else { return }
-                    layer.animations[index].duration = final
-                }
-                localDuration = nil
-            }
-    }
+          old=dedent('''
+              private func resizeGesture(_ animation: KeyframeAnimationModel) -> some Gesture {
+                  DragGesture(minimumDistance: 0)
+                      .onChanged { value in
+                          if localDuration == nil {
+                              startDuration = animation.duration
+                              localDuration = animation.duration
+                          }
+                          let speed = animation.speed
+                          let deltaEffective = Double(value.translation.width / max(pxPerSecond, 0.0001))
+                          let delta = deltaEffective * speed
+                          localDuration = (max(0.1, startDuration + delta) * 10).rounded() / 10
+                      }
+                      .onEnded { _ in
+                          let final = localDuration ?? animation.duration
+                          project.root.update(id: layerID) { layer in
+                              guard let index = layer.animations.firstIndex(where: { $0.id == animationID }) else { return }
+                              layer.animations[index].duration = final
+                          }
+                          localDuration = nil
+                      }
+              }
+          ''').lstrip('\n')
+          new=dedent('''
+              private func resizeGesture(_ animation: KeyframeAnimationModel) -> some Gesture {
+                  DragGesture(minimumDistance: 0)
+                      .onChanged { value in
+                          if localDuration == nil {
+                              startDuration = animation.duration
+                              localDuration = animation.duration
+                          }
+                          localDuration = calculatedDuration(animation, translation: value.translation.width)
+                      }
+                      .onEnded { value in
+                          let final = calculatedDuration(animation, translation: value.translation.width)
+                          project.root.update(id: layerID) { layer in
+                              guard let index = layer.animations.firstIndex(where: { $0.id == animationID }) else { return }
+                              layer.animations[index].duration = final
+                          }
+                          localDuration = nil
+                      }
+              }
 
-    private func calculatedDuration(_ animation: KeyframeAnimationModel, translation: CGFloat) -> Double {
-        let speed = animation.speed
-        let deltaEffective = Double(translation / max(pxPerSecond, 0.0001))
-        let delta = deltaEffective * speed
-        var next = max(0.1, startDuration + delta)
-        if shiftDown { next = (next * 2).rounded() / 2 }
-        return (next * 10).rounded() / 10
-    }
-'''
+              private func calculatedDuration(_ animation: KeyframeAnimationModel, translation: CGFloat) -> Double {
+                  let speed = animation.speed
+                  let deltaEffective = Double(translation / max(pxPerSecond, 0.0001))
+                  let delta = deltaEffective * speed
+                  var next = max(0.1, startDuration + delta)
+                  if shiftDown { next = (next * 2).rounded() / 2 }
+                  return (next * 10).rounded() / 10
+              }
+          ''').lstrip('\n')
           one(old,new)
-          s += '''
-private struct TimelineModifierCapture: UIViewRepresentable {
-    @Binding var isShiftDown: Bool
-    func makeUIView(context: Context) -> TimelineModifierView {
-        let view = TimelineModifierView()
-        view.onModifierChange = { isShiftDown = $0 }
-        DispatchQueue.main.async { _ = view.becomeFirstResponder() }
-        return view
-    }
-    func updateUIView(_ uiView: TimelineModifierView, context: Context) {
-        uiView.onModifierChange = { isShiftDown = $0 }
-    }
-}
+          s += dedent('''
 
-private final class TimelineModifierView: UIView {
-    var onModifierChange: ((Bool) -> Void)?
-    override var canBecomeFirstResponder: Bool { true }
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        onModifierChange?(event?.modifierFlags.contains(.shift) == true)
-        super.pressesBegan(presses, with: event)
-    }
-    override func pressesChanged(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        onModifierChange?(event?.modifierFlags.contains(.shift) == true)
-        super.pressesChanged(presses, with: event)
-    }
-    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        onModifierChange?(event?.modifierFlags.contains(.shift) == true)
-        super.pressesEnded(presses, with: event)
-    }
-    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        onModifierChange?(false)
-        super.pressesCancelled(presses, with: event)
-    }
-}
-'''
+              private struct TimelineModifierCapture: UIViewRepresentable {
+                  @Binding var isShiftDown: Bool
+                  func makeUIView(context: Context) -> TimelineModifierView {
+                      let view = TimelineModifierView()
+                      view.onModifierChange = { isShiftDown = $0 }
+                      DispatchQueue.main.async { _ = view.becomeFirstResponder() }
+                      return view
+                  }
+                  func updateUIView(_ uiView: TimelineModifierView, context: Context) {
+                      uiView.onModifierChange = { isShiftDown = $0 }
+                  }
+              }
+
+              private final class TimelineModifierView: UIView {
+                  var onModifierChange: ((Bool) -> Void)?
+                  override var canBecomeFirstResponder: Bool { true }
+                  override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+                      onModifierChange?(event?.modifierFlags.contains(.shift) == true)
+                      super.pressesBegan(presses, with: event)
+                  }
+                  override func pressesChanged(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+                      onModifierChange?(event?.modifierFlags.contains(.shift) == true)
+                      super.pressesChanged(presses, with: event)
+                  }
+                  override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+                      onModifierChange?(event?.modifierFlags.contains(.shift) == true)
+                      super.pressesEnded(presses, with: event)
+                  }
+                  override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+                      onModifierChange?(false)
+                      super.pressesCancelled(presses, with: event)
+                  }
+              }
+          ''')
           p.write_text(s)
           Path('.github/workflows/timeline-shift-parity.yml').unlink()
           PY
