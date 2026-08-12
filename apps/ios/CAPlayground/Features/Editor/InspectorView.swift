@@ -71,9 +71,9 @@ struct InspectorView: View {
             }
         }
         .caPanel()
-        .fileImporter(isPresented: $imageImporterOpen, allowedContentTypes: [.image], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $imageImporterOpen, allowedContentTypes: NativeImageAssetLoader.allowedTypes, allowsMultipleSelection: false) { result in
             guard case .success(let urls) = result, let url = urls.first else { return }
-            importImage(url)
+            Task { await importImage(url) }
         }
     }
 
@@ -111,13 +111,30 @@ struct InspectorView: View {
 
     @ViewBuilder private func compositing(_ layer: LayerModel) -> some View {
         Picker("Blending", selection: optionalString(\.blendMode, layer.blendMode ?? "normalBlendMode")) {
-            Text("Normal").tag("normalBlendMode"); Text("Multiply").tag("multiplyBlendMode")
-            Text("Screen").tag("screenBlendMode"); Text("Overlay").tag("overlayBlendMode")
+            Text("Normal").tag("normalBlendMode")
+            Text("Color").tag("colorBlendMode")
+            Text("Color Burn").tag("colorBurnBlendMode")
+            Text("Color Dodge").tag("colorDodgeBlendMode")
+            Text("Darken").tag("darkenBlendMode")
+            Text("Difference").tag("differenceBlendMode")
+            Text("Exclusion").tag("exclusionBlendMode")
+            Text("Hue").tag("hueBlendMode")
+            Text("Lighten").tag("lightenBlendMode")
+            Text("Luminosity").tag("luminosityBlendMode")
+            Text("Multiply").tag("multiplyBlendMode")
+            Text("Overlay").tag("overlayBlendMode")
+            Text("Saturation").tag("saturationBlendMode")
+            Text("Screen").tag("screenBlendMode")
         }
         Text("Opacity").font(.caption).foregroundStyle(.secondary)
         HStack { Slider(value: value(\.opacity, layer.opacity), in: 0...1); Text(layer.opacity.formatted(.percent.precision(.fractionLength(0)))).monospacedDigit() }
+        Text("Opacity affects the entire layer (content, background, and sublayers). Use Content → Background opacity to fade only the fill behind the content.")
+            .font(.caption2).foregroundStyle(.secondary)
         field("Corner Radius", layer.cornerRadius, \.cornerRadius)
         Toggle("Clip contents", isOn: value(\.masksToBounds, layer.masksToBounds))
+            .disabled(project.activeState != "Base State")
+        Text(project.activeState == "Base State" ? "Masks this layer's sublayers to its bounds." : "Not supported for state transitions")
+            .font(.caption2).foregroundStyle(.secondary)
     }
 
     @ViewBuilder private func content(_ layer: LayerModel) -> some View {
@@ -254,18 +271,13 @@ struct InspectorView: View {
     }
 
     private func update(_ mutation: (inout LayerModel) -> Void) { guard let selectedID else { return }; project.root.update(id: selectedID, mutation: mutation) }
-    private func importImage(_ url: URL) {
-        let accessing = url.startAccessingSecurityScopedResource()
-        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else { return }
-        var name = url.lastPathComponent
-        if name.isEmpty { name = "image-\(UUID().uuidString).png" }
-        if project.assets[name] != nil {
-            let base = url.deletingPathExtension().lastPathComponent
-            name = "\(base)-\(UUID().uuidString.prefix(8)).\(url.pathExtension.isEmpty ? "png" : url.pathExtension)"
-        }
-        project.assets[name] = data
-        update { $0.imageName = name }
+    @MainActor private func importImage(_ url: URL) async {
+        do {
+            let imported = try await NativeImageAssetLoader.load(url)
+            let name = project.uniqueAssetName(imported.filename, defaultExtension: "png")
+            project.setAsset(imported.data, named: name)
+            update { $0.imageName = name }
+        } catch { }
     }
     private func value<T>(_ keyPath: WritableKeyPath<LayerModel, T>, _ fallback: T) -> Binding<T> {
         Binding(get: {
