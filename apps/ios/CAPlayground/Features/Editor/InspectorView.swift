@@ -260,16 +260,41 @@ struct InspectorView: View {
     }
 
     @ViewBuilder private func filters(_ layer: LayerModel) -> some View {
-        Menu("Add filter") { ForEach(["gaussianBlur", "colorContrast", "colorHueRotate", "colorInvert", "colorSaturate", "CISepiaTone"], id: \.self) { type in Button(type) { update { $0.filters.append(.init(type: type, value: type == "colorContrast" || type == "colorSaturate" ? 1 : 0)) } } } }
+        Menu("Add filter") {
+            Button("Gaussian Blur") { addFilter(type: "gaussianBlur", value: 10) }
+            Button("Contrast") { addFilter(type: "colorContrast", value: 1) }
+            Button("Hue Rotate") { addFilter(type: "colorHueRotate", value: 0) }
+            Button("Invert") { addFilter(type: "colorInvert", value: 0) }
+            Button("Saturate") { addFilter(type: "colorSaturate", value: 0) }
+            Button("Sepia") { addFilter(type: "CISepiaTone", value: 1) }
+        }
         ForEach(layer.filters) { filter in
-            VStack(alignment: .leading) {
-                Toggle(filter.type, isOn: filterBinding(filter.id, \.enabled, filter.enabled))
-                HStack { Slider(value: filterBinding(filter.id, \.value, filter.value), in: filter.type == "gaussianBlur" ? 0...100 : 0...2); Text(filter.value.formatted(.number.precision(.fractionLength(2)))).monospacedDigit() }
-                Button("Remove", role: .destructive) { update { $0.filters.removeAll { $0.id == filter.id } } }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Toggle(filterName(filter.type), isOn: filterBinding(filter.id, \.enabled, filter.enabled))
+                    Spacer()
+                    Button(role: .destructive) { update { $0.filters.removeAll { $0.id == filter.id } } } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.bordered).controlSize(.small).accessibilityLabel("Remove filter")
+                }
+                if filter.type == "colorHueRotate" {
+                    Text("Angle").font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Slider(value: filterBinding(filter.id, \.value, filter.value), in: -180...180, step: 1)
+                        Text("\(Int(filter.value.rounded()))°").monospacedDigit().frame(width: 52, alignment: .trailing)
+                    }
+                } else if filter.type != "colorInvert" {
+                    LabeledContent(filterValueLabel(filter.type)) {
+                        TextField(filterValueLabel(filter.type), value: filterBinding(filter.id, \.value, filter.value), format: .number)
+                            .multilineTextAlignment(.trailing).keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder).frame(maxWidth: 120)
+                    }
+                }
             }.padding(10).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
         }
     }
 
+    private func addFilter(type: String, value: Double) { update { $0.filters.append(.init(type: type, value: value)) } }
+    private func filterName(_ type: String) -> String { switch type { case "gaussianBlur": "Gaussian Blur"; case "colorContrast": "Contrast"; case "colorHueRotate": "Hue Rotate"; case "colorInvert": "Invert"; case "colorSaturate": "Saturate"; case "CISepiaTone": "Sepia"; default: type } }
+    private func filterValueLabel(_ type: String) -> String { switch type { case "gaussianBlur": "Radius"; case "colorContrast", "colorSaturate": "Amount"; case "CISepiaTone": "Intensity"; case "colorHueRotate": "Angle"; default: "Value" } }
     private func update(_ mutation: (inout LayerModel) -> Void) { guard let selectedID else { return }; project.root.update(id: selectedID, mutation: mutation) }
     @MainActor private func importImage(_ url: URL) async {
         do {
