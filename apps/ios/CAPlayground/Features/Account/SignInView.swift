@@ -67,7 +67,7 @@ struct SignInView: View {
             } label: {
                 Text(auth.isLoading ? "Signing In..." : "Sign In").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent).tint(CATheme.accent).disabled(auth.isLoading)
+            .buttonStyle(CAWebButtonStyle(variant: .accent)).disabled(auth.isLoading)
             separator
             providerButton("Continue with Google", provider: "google", symbol: "g.circle")
             providerButton("Continue with GitHub", provider: "github", symbol: "chevron.left.forwardslash.chevron.right")
@@ -95,7 +95,7 @@ struct SignInView: View {
                     if await auth.signUp(username: signupUsername, email: email, password: password) { mode = .signIn }
                 }
             } label: { Text(auth.isLoading ? "Signing Up..." : "Sign Up").frame(maxWidth: .infinity) }
-                .buttonStyle(.borderedProminent).tint(CATheme.accent).disabled(auth.isLoading)
+                .buttonStyle(CAWebButtonStyle(variant: .accent)).disabled(auth.isLoading)
             separator
             providerButton("Sign up with Google", provider: "google", symbol: "g.circle")
             providerButton("Sign up with GitHub", provider: "github", symbol: "chevron.left.forwardslash.chevron.right")
@@ -114,7 +114,7 @@ struct SignInView: View {
             Button {
                 Task { await auth.sendPasswordReset(email: email) }
             } label: { Text(auth.isLoading ? "Sending..." : "Send reset link").frame(maxWidth: .infinity) }
-                .buttonStyle(.borderedProminent).tint(CATheme.accent).disabled(auth.isLoading)
+                .buttonStyle(CAWebButtonStyle(variant: .accent)).disabled(auth.isLoading)
             HStack(spacing: 4) {
                 Text("Remembered your password?").foregroundStyle(.secondary)
                 Button("Back to sign in") { clearMessages(); mode = .signIn }.foregroundStyle(CATheme.accent)
@@ -150,7 +150,7 @@ struct SignInView: View {
     private func providerButton(_ title: String, provider: String, symbol: String) -> some View {
         Button { auth.signIn(provider: provider) } label: {
             Label(title, systemImage: symbol).frame(maxWidth: .infinity)
-        }.buttonStyle(.bordered).disabled(auth.isLoading)
+        }.buttonStyle(CAWebButtonStyle(variant: .outline)).disabled(auth.isLoading)
     }
 
     private func clearMessages() { auth.error = nil; auth.message = nil }
