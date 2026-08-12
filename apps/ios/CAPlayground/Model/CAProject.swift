@@ -116,6 +116,48 @@ struct GradientStop: Codable, Hashable {
     var opacity: Double
 }
 
+struct FilterModel: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var type: String
+    var value: Double
+    var enabled = true
+}
+
+struct EmitterCellModel: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var name = "Particle"
+    var imageName: String?
+    var birthRate = 18.0
+    var lifetime = 2.5
+    var lifetimeRange = 0.0
+    var velocity = 45.0
+    var velocityRange = 25.0
+    var emissionLongitude = 0.0
+    var emissionLatitude = 0.0
+    var emissionRange = 360.0
+    var scale = 0.03
+    var scaleRange = 0.02
+    var scaleSpeed = 0.0
+    var alphaRange = 0.0
+    var alphaSpeed = -0.35
+    var spin = 0.0
+    var spinRange = 0.0
+    var xAcceleration = 0.0
+    var yAcceleration = 0.0
+    var color = "#FFFFFF"
+}
+
+struct GyroDictionaryModel: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var axis = "x"
+    var keyPath = "position.x"
+    var layerName: String
+    var mapMinTo = -50.0
+    var mapMaxTo = 50.0
+    var title = "Tilt Effect"
+    var view = "Wallpaper"
+}
+
 struct KeyframeAnimationModel: Codable, Hashable, Identifiable {
     var id = UUID()
     var enabled = true
@@ -153,6 +195,7 @@ struct LayerModel: Codable, Identifiable, Hashable {
     var geometryFlipped = false
     var masksToBounds = false
     var blendMode: String?
+    var filters: [FilterModel] = []
     var animations: [KeyframeAnimationModel] = []
 
     // Type-specific values mirror the web schema without coupling the model to UIKit.
@@ -174,11 +217,15 @@ struct LayerModel: Codable, Identifiable, Hashable {
     var gradientStops: [GradientStop]?
     var frameCount: Int?
     var framesPerSecond: Double?
+    var calculationMode: String?
+    var autoReverses: Bool?
+    var syncWithState: Bool?
     var emitterPosition: Vector2?
     var emitterSize: LayerSize?
     var emitterShape: String?
     var emitterMode: String?
     var renderMode: String?
+    var emitterCells: [EmitterCellModel]?
     var instanceCount: Int?
     var instanceTranslationX: Double?
     var instanceTranslationY: Double?
@@ -186,6 +233,7 @@ struct LayerModel: Codable, Identifiable, Hashable {
     var instanceRotation: Double?
     var instanceDelay: Double?
     var perspective: Double?
+    var gyroDictionaries: [GyroDictionaryModel]?
 
     var outlineChildren: [LayerModel]? { children.isEmpty ? nil : children }
 }
