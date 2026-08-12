@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+@MainActor
 struct ExportView: View {
     private enum ViewState { case select, success }
 
@@ -113,13 +114,18 @@ struct ExportView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 if license != .none {
-                    Toggle(isOn: $confirmed) {
-                        Text("I confirm that I created or have permission to use all content in this wallpaper and that I grant the selected license to the exported file.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    Button { confirmed.toggle() } label: {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: confirmed ? "checkmark.square.fill" : "square")
+                                .foregroundStyle(confirmed ? CATheme.accent : .secondary)
+                            Text("I confirm that I created or have permission to use all content in this wallpaper and that I grant the selected license to the exported file.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
                     }
-                    .toggleStyle(.checkbox)
+                    .buttonStyle(.plain)
                 } else {
                     Text("By exporting, you confirm that you created or have permission to use all content in this wallpaper.")
                         .font(.caption)
