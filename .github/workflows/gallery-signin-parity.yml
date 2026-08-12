@@ -1,0 +1,30 @@
+name: Apply gallery sign-in parity
+on:
+  push:
+    branches:
+      - agent/native-ios-conversion
+    paths:
+      - .github/workflows/gallery-signin-parity.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Patch gallery submission sign-in state
+        run: |
+          set -euo pipefail
+          python3 -c 'from pathlib import Path; p=Path("apps/ios/CAPlayground/Features/Wallpapers/WallpapersView.swift"); s=p.read_text(); old="            if auth.isSignedIn {\n                Button { showingSubmission = true } label: {\n                    Label(\"Submit Wallpaper\", systemImage: \"square.and.arrow.up\")\n                }.buttonStyle(CAWebButtonStyle(variant: .accent))\n            } else {\n                NavigationLink { SignInView() } label: {\n                    Label(\"Submit Wallpaper\", systemImage: \"square.and.arrow.up\")\n                }.buttonStyle(CAWebButtonStyle(variant: .accent))\n            }"; new="            Button { showingSubmission = true } label: {\n                Label(\"Submit Wallpaper\", systemImage: \"square.and.arrow.up\")\n            }.buttonStyle(CAWebButtonStyle(variant: .accent))"; assert s.count(old)==1, s.count(old); p.write_text(s.replace(old,new,1))'
+          python3 -c 'from pathlib import Path; p=Path("apps/ios/CAPlayground/Features/Account/DashboardView.swift"); s=p.read_text(); old="            ScrollView {\n                VStack(alignment: .leading, spacing: 20) { content }\n                    .padding(20)\n            }"; new="            ScrollView {\n                VStack(alignment: .leading, spacing: 20) {\n                    if auth.user == nil { signInRequiredContent } else { content }\n                }\n                .padding(20)\n            }"; assert s.count(old)==1, s.count(old); s=s.replace(old,new,1); marker="    private var title: String {\n"; insert="    private var signInRequiredContent: some View {\n        VStack(spacing: 16) {\n            Text(\"Sign In Required\").font(.title2.weight(.semibold))\n            Text(\"You need to be signed in to submit wallpapers\")\n                .foregroundStyle(.secondary)\n            Text(\"Please sign in to your account to submit wallpapers to the gallery.\")\n                .font(.subheadline)\n                .foregroundStyle(.secondary)\n                .multilineTextAlignment(.center)\n            NavigationLink(\"Sign In\") { SignInView() }\n                .buttonStyle(CAWebButtonStyle(variant: .accent))\n        }\n        .frame(maxWidth: .infinity)\n        .padding(.vertical, 28)\n    }\n\n"; assert s.count(marker)==1, s.count(marker); p.write_text(s.replace(marker,insert+marker,1))'
+          rm .github/workflows/gallery-signin-parity.yml
+      - name: Commit gallery parity
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Match gallery submission sign-in flow to website'
+          git push origin HEAD:agent/native-ios-conversion
