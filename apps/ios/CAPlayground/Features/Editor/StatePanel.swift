@@ -7,7 +7,7 @@ struct StatePanel: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("States").font(.headline).padding(12)
             Divider()
-            List(project.states, id: \.self, selection: $project.activeState) { state in
+            List(project.states, id: \.self) { state in
                 HStack {
                     Image(systemName: state == project.activeState ? "circle.inset.filled" : "circle")
                         .foregroundStyle(state == project.activeState ? CATheme.accent : .secondary)
