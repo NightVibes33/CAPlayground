@@ -1,0 +1,95 @@
+name: iOS Unsigned Device IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/ios/**"
+      - "scripts/package_unsigned_ipa.sh"
+      - ".github/workflows/ios-unsigned.yml"
+  pull_request:
+    paths:
+      - "apps/ios/**"
+      - "scripts/package_unsigned_ipa.sh"
+      - ".github/workflows/ios-unsigned.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned arm64 iPhoneOS IPA
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      PROJECT: apps/ios/CAPlayground.xcodeproj
+      SCHEME: CAPlayground
+      ARCHIVE_PATH: ${{ github.workspace }}/build/CAPlayground.xcarchive
+      OUTPUT_DIRECTORY: ${{ github.workspace }}/build/output
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify pinned toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+          swift --version
+          xcrun --sdk iphoneos --show-sdk-version
+          test -d "$PROJECT"
+          xcodebuild -project "$PROJECT" -scheme "$SCHEME" -list
+
+      - name: Build tests for iOS Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: Archive unsigned iPhoneOS application
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$ARCHIVE_PATH"
+          mkdir -p "$(dirname "$ARCHIVE_PATH")"
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            clean archive
+
+      - name: Verify and package unsigned IPA
+        shell: bash
+        run: bash scripts/package_unsigned_ipa.sh "$ARCHIVE_PATH" "$OUTPUT_DIRECTORY"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: CAPlayground-unsigned-device-ipa
+          path: |
+            build/output/CAPlayground-device-unsigned.ipa
+            build/output/CAPlayground-device-unsigned.ipa.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
