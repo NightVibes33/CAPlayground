@@ -206,13 +206,17 @@ final class CoreAnimationRenderer {
         layer.renderMode = CAEmitterLayerRenderMode(rawValue: model.renderMode ?? "unordered")
         layer.emitterCells = (model.emitterCells ?? [.init()]).map { model in
             let cell = CAEmitterCell(); cell.name = model.name; cell.birthRate = Float(model.birthRate)
+            cell.contentsScale = CGFloat(model.contentsScale)
             cell.lifetime = Float(model.lifetime); cell.lifetimeRange = Float(model.lifetimeRange)
             cell.velocity = CGFloat(model.velocity); cell.velocityRange = CGFloat(model.velocityRange)
             cell.emissionLongitude = CGFloat(model.emissionLongitude * .pi / 180); cell.emissionLatitude = CGFloat(model.emissionLatitude * .pi / 180); cell.emissionRange = CGFloat(model.emissionRange * .pi / 180)
             cell.scale = CGFloat(model.scale); cell.scaleRange = CGFloat(model.scaleRange); cell.scaleSpeed = CGFloat(model.scaleSpeed)
-            cell.alphaRange = Float(model.alphaRange); cell.alphaSpeed = Float(model.alphaSpeed)
+            cell.alpha = Float(model.alpha); cell.alphaRange = Float(model.alphaRange); cell.alphaSpeed = Float(model.alphaSpeed)
             cell.spin = CGFloat(model.spin * .pi / 180); cell.spinRange = CGFloat(model.spinRange * .pi / 180)
             cell.xAcceleration = CGFloat(model.xAcceleration); cell.yAcceleration = CGFloat(model.yAcceleration)
+            cell.redRange = Float(model.redRange); cell.redSpeed = Float(model.redSpeed)
+            cell.greenRange = Float(model.greenRange); cell.greenSpeed = Float(model.greenSpeed)
+            cell.blueRange = Float(model.blueRange); cell.blueSpeed = Float(model.blueSpeed)
             cell.color = UIColor(caHex: model.color)?.cgColor
             cell.contents = model.imageName.flatMap { name in assets[name].flatMap(UIImage.init(data:)) ?? UIImage(named: name) }?.cgImage ?? UIImage(systemName: "sparkle")?.withTintColor(.white).cgImage
             return cell
