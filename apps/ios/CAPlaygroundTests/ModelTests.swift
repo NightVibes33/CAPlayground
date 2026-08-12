@@ -126,24 +126,32 @@ final class ModelTests: XCTestCase {
         var cell = EmitterCellModel()
         cell.name = "Spark"
         cell.imageName = "spark.png"
+        cell.contentsScale = 2.25
         cell.birthRate = 31
         cell.lifetime = 4.5
         cell.lifetimeRange = 1.2
         cell.velocity = 88
         cell.velocityRange = 9
-        cell.emissionLongitude = 1.1
-        cell.emissionLatitude = 0.2
-        cell.emissionRange = 2.6
+        cell.emissionLongitude = 63
+        cell.emissionLatitude = 11
+        cell.emissionRange = 149
         cell.scale = 0.12
         cell.scaleRange = 0.04
         cell.scaleSpeed = -0.01
+        cell.alpha = 0.73
         cell.alphaRange = 0.3
         cell.alphaSpeed = -0.2
-        cell.spin = 0.9
-        cell.spinRange = 0.4
+        cell.spin = 52
+        cell.spinRange = 23
         cell.xAcceleration = 2
         cell.yAcceleration = 13
         cell.color = "#FF8844"
+        cell.redRange = 0.11
+        cell.redSpeed = -0.07
+        cell.greenRange = 0.22
+        cell.greenSpeed = 0.08
+        cell.blueRange = 0.33
+        cell.blueSpeed = -0.09
 
         var emitter = LayerModel(
             id: emitterID, name: "Particles", kind: .emitter,
@@ -173,6 +181,7 @@ final class ModelTests: XCTestCase {
         let importedRoot = try XCTUnwrap(imported.documents[.floating]?.root)
         let importedGradient = try XCTUnwrap(importedRoot.find(id: gradientID))
         let importedEmitter = try XCTUnwrap(importedRoot.find(id: emitterID))
+        let importedCell = try XCTUnwrap(importedEmitter.emitterCells?.first)
         let gradientStartX = try XCTUnwrap(importedGradient.gradientStart?.x)
         let gradientEndY = try XCTUnwrap(importedGradient.gradientEnd?.y)
 
@@ -189,9 +198,22 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(importedGradient.animations.first?.values?.count, 2)
         XCTAssertEqual(importedEmitter.emitterShape, "line")
         XCTAssertEqual(importedEmitter.emitterMode, "surface")
-        XCTAssertEqual(importedEmitter.emitterCells?.first?.name, "Spark")
-        XCTAssertEqual(importedEmitter.emitterCells?.first?.imageName, "spark.png")
-        XCTAssertEqual(importedEmitter.emitterCells?.first?.birthRate, 31)
+        XCTAssertEqual(importedCell.name, "Spark")
+        XCTAssertEqual(importedCell.imageName, "spark.png")
+        XCTAssertEqual(importedCell.contentsScale, 2.25, accuracy: 0.0001)
+        XCTAssertEqual(importedCell.birthRate, 31, accuracy: 0.0001)
+        XCTAssertEqual(importedCell.emissionLongitude, 63, accuracy: 0.001)
+        XCTAssertEqual(importedCell.emissionLatitude, 11, accuracy: 0.001)
+        XCTAssertEqual(importedCell.emissionRange, 149, accuracy: 0.001)
+        XCTAssertEqual(importedCell.alpha, 0.73, accuracy: 0.0001)
+        XCTAssertEqual(importedCell.spin, 52, accuracy: 0.001)
+        XCTAssertEqual(importedCell.spinRange, 23, accuracy: 0.001)
+        XCTAssertEqual(importedCell.redRange, 0.11, accuracy: 0.0001)
+        XCTAssertEqual(importedCell.redSpeed, -0.07, accuracy: 0.0001)
+        XCTAssertEqual(importedCell.greenRange, 0.22, accuracy: 0.0001)
+        XCTAssertEqual(importedCell.greenSpeed, 0.08, accuracy: 0.0001)
+        XCTAssertEqual(importedCell.blueRange, 0.33, accuracy: 0.0001)
+        XCTAssertEqual(importedCell.blueSpeed, -0.09, accuracy: 0.0001)
         XCTAssertEqual(importedEmitter.gyroDictionaries?.first?.layerName, "Particles")
         XCTAssertEqual(imported.documents[.floating]?.stateOverrides["Locked"]?.first?.value, .number(0.25))
         XCTAssertEqual(imported.documents[.floating]?.stateTransitions.first?.fromState, "Locked")
