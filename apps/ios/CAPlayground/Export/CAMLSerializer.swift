@@ -24,14 +24,16 @@ enum CAMLSerializer {
         case .gradient: "CAGradientLayer"; case .emitter: "CAEmitterLayer"; case .transform: "CATransformLayer"
         case .replicator: "CAReplicatorLayer"; case .text: "CATextLayer"; default: "CALayer"
         }
+        let shapeCornerRadius = model.kind == .shape ? (model.shape == "circle" ? min(model.size.width, model.size.height) / 2 : model.cornerRadius) : model.cornerRadius
+        let exportedBackground = model.kind == .shape ? model.fillColor : model.backgroundColor
         var attributes: [(String, String?)] = [
             ("id", model.id.uuidString), ("name", model.name), ("bounds", "0 0 \(number(model.size.width)) \(number(model.size.height))"),
             ("position", "\(number(model.position.x)) \(number(model.position.y))"), ("anchorPoint", "\(number(model.anchorPoint.x)) \(number(model.anchorPoint.y))"),
             ("zPosition", model.zPosition == 0 ? nil : number(model.zPosition)), ("opacity", model.opacity == 1 ? nil : number(model.opacity)),
-            ("speed", model.speed == 1 ? nil : number(model.speed)), ("cornerRadius", model.cornerRadius == 0 ? nil : number(model.cornerRadius)),
+            ("speed", model.speed == 1 ? nil : number(model.speed)), ("cornerRadius", shapeCornerRadius == 0 ? nil : number(shapeCornerRadius)),
             ("masksToBounds", model.masksToBounds ? "1" : nil), ("geometryFlipped", model.geometryFlipped ? "1" : nil),
-            ("backgroundColor", model.backgroundColor.flatMap(color)), ("borderColor", model.borderColor.flatMap(color)),
-            ("borderWidth", model.borderWidth == 0 ? nil : number(model.borderWidth)), ("compositingFilter", model.blendMode)
+            ("backgroundColor", exportedBackground.flatMap(color)), ("borderColor", (model.kind == .shape ? model.strokeColor : model.borderColor).flatMap(color)),
+            ("borderWidth", (model.kind == .shape ? model.strokeWidth ?? 0 : model.borderWidth) == 0 ? nil : number(model.kind == .shape ? model.strokeWidth ?? 0 : model.borderWidth)), ("compositingFilter", model.blendMode)
         ]
         var transforms: [String] = []
         if model.scale != 1 { transforms.append("scale(\(number(model.scale)))") }
@@ -51,6 +53,7 @@ enum CAMLSerializer {
                 ("caplayFramePrefix", model.framePrefix), ("caplayFrameExtension", model.frameExtension ?? ".jpg"),
                 ("caplaySyncWWithState", (model.syncWithState ?? false) ? "1" : "0")
             ]
+            if let modes = model.syncStateFrameMode, let data = try? JSONEncoder().encode(modes), let json = String(data: data, encoding: .utf8) { attributes.append(("caplaySyncStateFrameMode", json)) }
         }
         if model.kind == .replicator { attributes += [("instanceCount", String(model.instanceCount ?? 1)), ("instanceDelay", model.instanceDelay.map(number)), ("instanceTransform", instanceTransform(model)), ("instanceColor", "1 1 1"), ("preservesDepth", "1")] }
         if (model.kind == .transform || model.kind == .replicator), let perspective = model.perspective { attributes.append(("sublayerTransform", "perspective(\(number(perspective)))")) }
@@ -85,7 +88,7 @@ enum CAMLSerializer {
         return "\n\(pad)<animations>" + animations.filter(\.enabled).map { animation in
             let values = animation.numericValues.map(number).joined(separator: " ")
             let times = animation.keyTimes.map(number).joined(separator: " ")
-            return "\n\(pad)  <CAKeyframeAnimation keyPath=\"\(escape(animation.keyPath))\" duration=\"\(number(animation.duration))\" values=\"\(values)\" keyTimes=\"\(times)\" repeatCount=\"\(animation.repeats ? "inf" : "0")\" autoreverses=\"\(animation.autoreverses ? "1" : "0")\" calculationMode=\"\(animation.calculationMode)\"/>"
+            return "\n\(pad)  <CAKeyframeAnimation keyPath=\"\(escape(animation.keyPath))\" duration=\"\(number(animation.duration))\" speed=\"\(number(animation.speed))\" values=\"\(values)\" keyTimes=\"\(times)\" repeatCount=\"\(animation.repeats ? "inf" : "0")\" repeatDuration=\"\(animation.repeats ? "inf" : number(animation.repeatDurationSeconds ?? animation.duration))\" autoreverses=\"\(animation.autoreverses ? "1" : "0")\" calculationMode=\"\(animation.calculationMode)\" timingFunction=\"\(escape(animation.timingFunction))\"/>"
         }.joined() + "\n\(pad)</animations>"
     }
 
