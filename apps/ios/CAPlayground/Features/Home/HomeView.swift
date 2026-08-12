@@ -45,6 +45,8 @@ struct HomeView: View {
                     NavigationLink("Roadmap") { RoadmapView() }
                     NavigationLink("Wallpapers") { WallpapersView() }
                     NavigationLink("Tendies Checker") { TendiesCheckerView() }
+                    NavigationLink("Privacy Policy") { PrivacyPolicyView() }
+                    NavigationLink("Terms of Service") { TermsOfServiceView() }
                     if auth.isSignedIn {
                         NavigationLink("Account") { AccountView() }
                     } else {
@@ -62,7 +64,7 @@ struct HomeView: View {
                 }.font(.subheadline).foregroundStyle(.primary)
                 if auth.isSignedIn {
                     Menu {
-                        NavigationLink("Dashboard") { AccountView() }
+                        NavigationLink("Dashboard") { DashboardView() }
                         Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { Task { await auth.signOut() } }
                     } label: { Image(systemName: "person").frame(width: 36, height: 36) }
                 } else {
@@ -162,7 +164,7 @@ struct HomeView: View {
     }
 
     private var footer: some View {
-        HStack { Text("CAPlayground").fontWeight(.bold); Spacer(); NavigationLink("Tendies Checker") { TendiesCheckerView() }; Text("Open Source Core Animation Wallpaper Editor").foregroundStyle(.secondary) }
+        HStack { Text("CAPlayground").fontWeight(.bold); Spacer(); NavigationLink("Privacy") { PrivacyPolicyView() }; NavigationLink("Terms") { TermsOfServiceView() }; NavigationLink("Tendies Checker") { TendiesCheckerView() } }
             .padding(24).overlay(alignment: .top) { Divider() }
     }
 }
