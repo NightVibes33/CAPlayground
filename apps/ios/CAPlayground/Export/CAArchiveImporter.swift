@@ -105,6 +105,7 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         layer.frameExtension = attributes["caplayFrameExtension"]
         layer.autoReverses = attributes["caplayAutoReverses"].map { $0 == "1" }
         layer.syncWithState = attributes["caplaySyncWWithState"].map { $0 == "1" }
+        if let json = attributes["caplaySyncStateFrameMode"]?.data(using: .utf8) { layer.syncStateFrameMode = try? JSONDecoder().decode([String: String].self, from: json) }
         stack.append(.init(layer: layer))
     }
 
