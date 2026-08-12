@@ -1,0 +1,60 @@
+name: Wire Animation Parity
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/wire-animation-parity.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Wire animation panel
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          inspector = Path('apps/ios/CAPlayground/Features/Editor/InspectorView.swift')
+          s = inspector.read_text()
+          pattern = re.compile(r'    @ViewBuilder private func animations\(_ layer: LayerModel\) -> some View \{.*?\n    \}\n\n(?=    @ViewBuilder private func gyro)', re.S)
+          replacement = '''    @ViewBuilder private func animations(_ layer: LayerModel) -> some View {
+              AnimationInspectorPanel(project: $project, selectedID: $selectedID)
+          }
+
+          '''
+          s, count = pattern.subn(replacement, s, count=1)
+          if count != 1:
+              raise SystemExit(f'Inspector animation block count={count}')
+          inspector.write_text(s)
+
+          pbx = Path('apps/ios/CAPlayground.xcodeproj/project.pbxproj')
+          p = pbx.read_text()
+          changes = [
+              ('\t\tB00000000000000000000025 = {isa = PBXBuildFile; fileRef = C00000000000000000000027; };\n/* End PBXBuildFile section */',
+               '\t\tB00000000000000000000025 = {isa = PBXBuildFile; fileRef = C00000000000000000000027; };\n\t\tB00000000000000000000026 = {isa = PBXBuildFile; fileRef = C00000000000000000000028; };\n/* End PBXBuildFile section */'),
+              ('\t\tC00000000000000000000027 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Networking/DriveStore.swift; sourceTree = "<group>"; };\n/* End PBXFileReference section */',
+               '\t\tC00000000000000000000027 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Networking/DriveStore.swift; sourceTree = "<group>"; };\n\t\tC00000000000000000000028 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Features/Editor/AnimationInspectorPanel.swift; sourceTree = "<group>"; };\n/* End PBXFileReference section */'),
+              ('C0000000000000000000000D, C0000000000000000000000E,',
+               'C0000000000000000000000D, C00000000000000000000028, C0000000000000000000000E,'),
+              ('B00000000000000000000023, B00000000000000000000024, B00000000000000000000025); runOnlyForDeploymentPostprocessing = 0; };',
+               'B00000000000000000000023, B00000000000000000000024, B00000000000000000000025, B00000000000000000000026); runOnlyForDeploymentPostprocessing = 0; };')
+          ]
+          for old, new in changes:
+              if p.count(old) != 1:
+                  raise SystemExit(f'pbx exact match count={p.count(old)} for {old[:60]!r}')
+              p = p.replace(old, new, 1)
+          pbx.write_text(p)
+          Path('.github/workflows/wire-animation-parity.yml').unlink()
+          PY
+      - name: Commit wiring
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Use website-parity animation inspector in native editor'
+          git push origin HEAD:agent/native-ios-conversion
