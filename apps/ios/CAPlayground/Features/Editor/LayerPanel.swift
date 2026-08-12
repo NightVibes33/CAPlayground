@@ -4,149 +4,83 @@ import UIKit
 import ImageIO
 import WebKit
 
-fileprivate enum LayerDropPosition { case before, after, into }
-
 struct LayerPanel: View {
     @Binding var project: CAProjectDocument
     @Binding var selectedID: UUID?
-    @State private var renameOpen = false
-    @State private var renameID: UUID?
-    @State private var renameValue = ""
     @State private var collapsed: Set<UUID> = []
-    @State private var rootCollapsed = false
-    @State private var selectMode = false
     @State private var multiSelected: Set<UUID> = []
     @State private var dragOverID: UUID?
     @State private var dragPosition: LayerDropPosition?
+    @State private var renameOpen = false
+    @State private var renameValue = ""
+    @State private var renameID: UUID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Layers").font(.headline)
                 Spacer()
-                if selectedID.flatMap({ project.root.find(id: $0) })?.kind == .emitter {
-                    Button { } label: { Label("Add Layer", systemImage: "plus") }.buttonStyle(.plain).disabled(true)
-                        .help("Sublayers are not supported for emitter layers.")
-                } else {
-                    AddLayerMenu(project: $project, selectedID: $selectedID)
+                if !multiSelected.isEmpty {
+                    Menu {
+                        Button("Duplicate Selected") { duplicateSelected() }
+                        Divider()
+                        Button("Delete Selected", role: .destructive) { deleteSelected() }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("Selected layers actions")
                 }
+                AddLayerMenu(project: $project, selectedID: $selectedID)
             }
             .padding(12)
             Divider()
-
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    rootRow
-                    if !rootCollapsed {
-                        if project.root.children.isEmpty {
-                            Text("No layers yet").font(.subheadline).foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 24).frame(height: 40)
-                        }
-                        ForEach(project.root.children) { layer in rowTree(layer, depth: 1) }
+                    ForEach(project.root.children) { layer in
+                        layerRow(layer, depth: 0)
                     }
                 }
-                .dropDestination(for: String.self) { items, _ in
-                    guard let raw = items.first, let source = UUID(uuidString: raw) else { return false }
-                    move(source, target: nil, position: .after)
-                    return true
-                }
+                .padding(.vertical, 4)
             }
-
-            if selectMode {
-                Divider()
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(multiSelected.count) selected").font(.caption).foregroundStyle(.secondary)
-                    HStack(spacing: 8) {
-                        Button { duplicateSelected() } label: { Image(systemName: "doc.on.doc").frame(width: 32, height: 32) }
-                            .buttonStyle(.bordered).disabled(multiSelected.isEmpty).help("Duplicate layers")
-                        Button(role: .destructive) { deleteSelected() } label: { Image(systemName: "trash").frame(width: 32, height: 32) }
-                            .buttonStyle(.bordered).disabled(multiSelected.isEmpty).help("Delete layers")
-                        Button { selectMode = false; multiSelected.removeAll() } label: { Label("Done", systemImage: "checkmark").frame(maxWidth: .infinity) }
-                            .buttonStyle(.borderedProminent)
-                    }
-                }.padding(10)
+            .dropDestination(for: String.self) { items, _ in
+                guard let raw = items.first, let source = UUID(uuidString: raw) else { return false }
+                move(source, target: nil, position: .after); return true
             }
         }
         .caPanel()
         .sheet(isPresented: $renameOpen) { renameDialog }
-        .onChange(of: project.root) { _, root in multiSelected = Set(multiSelected.filter { root.find(id: $0) != nil }) }
     }
 
-    private var rootRow: some View {
-        HStack(spacing: 6) {
-            if !project.root.children.isEmpty {
-                Button { rootCollapsed.toggle() } label: { Image(systemName: rootCollapsed ? "chevron.right" : "chevron.down").font(.system(size: 11)).frame(width: 18, height: 28) }.buttonStyle(.plain)
-            } else { Color.clear.frame(width: 18, height: 28) }
-            Text("Root Layer").fontWeight(.medium)
-            Spacer()
-        }
-        .padding(.horizontal, 8).frame(height: 40)
-        .background(selectedID == project.root.id ? CATheme.accent.opacity(0.30) : .clear)
-        .contentShape(Rectangle()).onTapGesture { if !selectMode { selectedID = project.root.id } }
-    }
-
-    private func rowTree(_ layer: LayerModel, depth: Int) -> AnyView {
-        AnyView(
-            VStack(spacing: 0) {
-                layerRow(layer, depth: depth)
-                if !collapsed.contains(layer.id), layer.kind != .video {
-                    ForEach(layer.children) { child in
-                        rowTree(child, depth: depth + 1)
-                    }
-                }
-            }
-        )
-    }
-
-    private func layerRow(_ layer: LayerModel, depth: Int) -> some View {
+    @ViewBuilder private func layerRow(_ layer: LayerModel, depth: Int) -> some View {
         let protected = isProtected(layer)
-        let hasChildren = layer.kind != .video && !layer.children.isEmpty
-        let hidden = !layer.isVisible
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             if dragOverID == layer.id && dragPosition == .before { dropLine(depth) }
-            HStack(spacing: 5) {
-                if selectMode && !protected {
-                    Button { toggleMulti(layer.id) } label: {
-                        Image(systemName: multiSelected.contains(layer.id) ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(multiSelected.contains(layer.id) ? CATheme.accent : .secondary).frame(width: 18, height: 28)
-                    }.buttonStyle(.plain)
-                } else if hasChildren {
-                    Button { toggleCollapse(layer.id) } label: {
-                        Image(systemName: collapsed.contains(layer.id) ? "chevron.right" : "chevron.down").font(.system(size: 11)).frame(width: 18, height: 28)
-                    }.buttonStyle(.plain)
-                } else { Color.clear.frame(width: 18, height: 28) }
-
-                Image(systemName: layer.kind.symbol).font(.system(size: 13)).foregroundStyle(.secondary)
-                Text(layer.name).lineLimit(1)
-                Text("(\(layer.kind == .shape ? "basic" : layer.kind.rawValue))").foregroundStyle(.secondary).font(.caption)
+            HStack(spacing: 6) {
+                Button { if !layer.children.isEmpty { toggleCollapse(layer.id) } } label: {
+                    Image(systemName: layer.children.isEmpty ? "circle.fill" : (collapsed.contains(layer.id) ? "chevron.right" : "chevron.down"))
+                        .font(.system(size: layer.children.isEmpty ? 5 : 10, weight: .semibold)).frame(width: 14, height: 28)
+                }.buttonStyle(.plain)
+                Image(systemName: layer.kind.symbol).font(.system(size: 12)).frame(width: 16)
+                Text(layer.name).font(.system(size: 13)).lineLimit(1)
                 Spacer(minLength: 4)
-                Button { project.root.update(id: layer.id) { $0.isVisible.toggle() } } label: {
-                    Image(systemName: hidden ? "eye.slash" : "eye").frame(width: 26, height: 28).foregroundStyle(.secondary)
-                }.buttonStyle(.plain).help(hidden ? "Show layer" : "Hide layer")
-                if !protected {
-                    Menu {
-                        Button("Rename") { beginRename(layer) }
-                        Button("Duplicate") { if let newID = project.root.duplicate(id: layer.id) { selectedID = newID } }
-                        Button("Delete", role: .destructive) { delete(layer.id) }
-                        Button("Select") { selectMode = true; multiSelected.insert(layer.id) }
-                    } label: { Image(systemName: "ellipsis.vertical").frame(width: 26, height: 28).foregroundStyle(.secondary) }
-                }
+                if protected { Image(systemName: "lock.fill").font(.system(size: 9)).foregroundStyle(.secondary) }
+                if multiSelected.contains(layer.id) { Image(systemName: "checkmark.circle.fill").foregroundStyle(CATheme.accent).font(.system(size: 12)) }
+                Menu {
+                    Button("Rename", systemImage: "pencil") { beginRename(layer) }
+                    Button("Duplicate", systemImage: "plus.square.on.square") { if let duplicate = project.root.duplicate(id: layer.id) { selectedID = duplicate } }
+                    Divider()
+                    Button("Bring to Front") { project.root.reorder(id: layer.id, action: .front) }
+                    Button("Bring Forward") { project.root.reorder(id: layer.id, action: .forward) }
+                    Button("Send Backward") { project.root.reorder(id: layer.id, action: .backward) }
+                    Button("Send to Back") { project.root.reorder(id: layer.id, action: .back) }
+                    Divider()
+                    Button(multiSelected.contains(layer.id) ? "Remove from Selection" : "Add to Selection") { toggleMulti(layer.id) }
+                    if !protected { Button("Delete", systemImage: "trash", role: .destructive) { delete(layer.id) } }
+                } label: { Image(systemName: "ellipsis").frame(width: 28, height: 28) }
             }
-            .font(.system(size: 14))
-            .padding(.leading, CGFloat(8 + depth * 16)).padding(.trailing, 8).frame(height: 40)
-            .opacity(hidden ? 0.5 : 1)
-            .background(dragOverID == layer.id && dragPosition == .into ? CATheme.accent.opacity(0.30) : selectedID == layer.id && dragOverID == nil ? CATheme.accent.opacity(0.30) : .clear)
+            .padding(.leading, CGFloat(8 + depth * 16)).padding(.trailing, 6).frame(height: 40)
+            .background(selectedID == layer.id ? CATheme.accent.opacity(0.18) : (dragOverID == layer.id && dragPosition == .into ? CATheme.accent.opacity(0.08) : .clear))
             .contentShape(Rectangle())
-            .onTapGesture(count: 2) { if !selectMode { beginRename(layer) } }
-            .onTapGesture { if selectMode && !protected { toggleMulti(layer.id) } else { selectedID = layer.id } }
-            .contextMenu {
-                Button("Bring to Front") { project.root.reorder(id: layer.id, action: .front) }
-                Button("Bring Forward") { project.root.reorder(id: layer.id, action: .forward) }
-                Button("Send Backward") { project.root.reorder(id: layer.id, action: .backward) }
-                Button("Send to Back") { project.root.reorder(id: layer.id, action: .back) }
-                Divider(); Button("Rename…") { beginRename(layer) }; Button("Duplicate") { if let newID = project.root.duplicate(id: layer.id) { selectedID = newID } }
-                if !protected { Button("Delete", role: .destructive) { delete(layer.id) } }
-            }
+            .onTapGesture { selectedID = layer.id }
+            .onTapGesture(count: 2) { beginRename(layer) }
             .draggable(layer.id.uuidString)
             .dropDestination(for: String.self) { items, point in
                 guard let raw = items.first, let source = UUID(uuidString: raw), source != layer.id else { return false }
@@ -159,6 +93,9 @@ struct LayerPanel: View {
                 dragPosition = targeted ? .into : nil
             }
             if dragOverID == layer.id && dragPosition == .after { dropLine(depth) }
+            if !collapsed.contains(layer.id) {
+                ForEach(layer.children) { child in layerRow(child, depth: depth + 1) }
+            }
         }
     }
 
@@ -199,7 +136,7 @@ struct LayerPanel: View {
     }
 }
 
-struct AdLayerMenu: View {
+struct AddLayerMenu: View {
     @Binding var project: CAProjectDocument
     @Binding var selectedID: UUID?
     var mobileMode = false
