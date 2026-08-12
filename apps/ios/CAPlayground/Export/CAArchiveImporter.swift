@@ -163,7 +163,6 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
             if currentEmitterCell != nil {
                 currentEmitterCell?.cell.imageName = source.map(assetName)
             } else if currentAnimation != nil, animationSection == "values", let source {
-                // Contents animations are represented by the video metadata on VideoLayer.
                 if layerStack[index].layer.kind == .basic { layerStack[index].layer.kind = .video }
                 if layerStack[index].layer.framePrefix == nil {
                     inferVideoFrameNaming(source, layerIndex: index)
@@ -287,8 +286,8 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         layer.speed = number(attributes["speed"]) ?? 1
         layer.cornerRadius = number(attributes["cornerRadius"]) ?? 0
         layer.borderWidth = number(attributes["borderWidth"]) ?? 0
-        layer.masksToBounds = bool(attributes["masksToBounds"])
-        layer.geometryFlipped = bool(attributes["geometryFlipped"])
+        layer.masksToBounds = attributes["masksToBounds"].map(bool) ?? false
+        layer.geometryFlipped = attributes["geometryFlipped"].map(bool) ?? false
         layer.backgroundColor = color(attributes["backgroundColor"])
         layer.borderColor = color(attributes["borderColor"])
         layer.blendMode = attributes["compositingFilter"]
@@ -346,7 +345,7 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
             keyPath: attributes["keyPath"] ?? "position",
             duration: number(attributes["duration"]) ?? 1,
             speed: number(attributes["speed"]) ?? 1,
-            autoreverses: bool(attributes["autoreverses"]),
+            autoreverses: attributes["autoreverses"].map(bool) ?? false,
             repeats: repeats,
             repeatDuration: repeats ? nil : number(repeatDurationRaw),
             calculationMode: attributes["calculationMode"] ?? "linear",
