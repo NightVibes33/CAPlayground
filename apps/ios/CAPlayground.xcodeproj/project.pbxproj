@@ -37,7 +37,7 @@
 		C00000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem/CATheme.swift; sourceTree = "<group>"; };
 		C00000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model/CAProject.swift; sourceTree = "<group>"; };
 		C00000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence/ProjectStore.swift; sourceTree = "<group>"; };
-		C00000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rendering/Color+Hex.swift; sourceTree = "<group>"; };
+		C00000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Rendering/Color+Hex.swift"; sourceTree = "<group>"; };
 		C00000000000000000000006 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rendering/CoreAnimationRenderer.swift; sourceTree = "<group>"; };
 		C00000000000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rendering/EditorCanvasView.swift; sourceTree = "<group>"; };
 		C00000000000000000000008 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rendering/EditorCanvasRepresentable.swift; sourceTree = "<group>"; };
