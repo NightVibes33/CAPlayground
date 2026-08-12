@@ -25,22 +25,33 @@ struct StatePanel: View {
             }
             .padding(12)
             Divider()
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(["Base State"] + project.states, id: \.self) { state in
-                        HStack {
-                            Image(systemName: state == project.activeState ? "circle.inset.filled" : "circle")
-                                .foregroundStyle(state == project.activeState ? CATheme.accent : .secondary)
+
+            VStack(spacing: 0) {
+                Text("Project States")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .frame(height: 40)
+                    .background(Color.secondary.opacity(0.08))
+                Divider()
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(["Base State"] + project.states, id: \.self) { state in
                             Text(state)
-                            Spacer()
-                            Text("\(project.stateOverrides[state]?.count ?? 0)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                .font(.system(size: 14))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .frame(height: 40)
+                                .background(state == project.activeState ? CATheme.accent.opacity(0.30) : .clear)
+                                .contentShape(Rectangle())
+                                .onTapGesture { project.activeState = state }
                         }
-                        .font(.system(size: 14)).padding(.horizontal, 12).frame(height: 40)
-                        .background(state == project.activeState ? CATheme.accent.opacity(0.30) : .clear)
-                        .contentShape(Rectangle()).onTapGesture { project.activeState = state }
                     }
                 }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+            .padding(12)
         }
         .caPanel()
         .sheet(isPresented: $viewAllOpen) { stateOverview }
