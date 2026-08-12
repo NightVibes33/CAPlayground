@@ -20,6 +20,8 @@ struct InspectorView: View {
     @Binding var selectedID: UUID?
     @State private var activeTab: Tab = .geometry
     @State private var imageImporterOpen = false
+    @State private var emitterImageImporterOpen = false
+    @State private var emitterImageTargetID: UUID?
 
     private var selected: LayerModel? { selectedID.flatMap { project.root.find(id: $0) } }
     private var tabs: [Tab] {
@@ -74,6 +76,12 @@ struct InspectorView: View {
         .fileImporter(isPresented: $imageImporterOpen, allowedContentTypes: NativeImageAssetLoader.allowedTypes, allowsMultipleSelection: false) { result in
             guard case .success(let urls) = result, let url = urls.first else { return }
             Task { await importImage(url) }
+        }
+        .fileImporter(isPresented: $emitterImageImporterOpen, allowedContentTypes: NativeImageAssetLoader.allowedTypes, allowsMultipleSelection: false) { result in
+            guard case .success(let urls) = result, let url = urls.first else { emitterImageTargetID = nil; return }
+            let target = emitterImageTargetID
+            emitterImageTargetID = nil
+            Task { await importEmitterCellImage(url, targetID: target) }
         }
     }
 
@@ -233,22 +241,91 @@ struct InspectorView: View {
     }
 
     @ViewBuilder private func emitter(_ layer: LayerModel) -> some View {
+        let inState = project.activeState != "Base State"
         pointEditor("Emitter Position", keyPath: \.emitterPosition, point: layer.emitterPosition ?? .init(x: 0, y: 0))
         sizeEditor("Emitter Size", keyPath: \.emitterSize, size: layer.emitterSize ?? .init(width: 1, height: 1))
         Picker("Render Mode", selection: optionalString(\.renderMode, layer.renderMode ?? "unordered")) { Text("unordered").tag("unordered"); Text("additive").tag("additive") }
         Picker("Shape", selection: optionalString(\.emitterShape, layer.emitterShape ?? "point")) { Text("point").tag("point"); Text("line").tag("line"); Text("rectangle").tag("rectangle") }
         Picker("Mode", selection: optionalString(\.emitterMode, layer.emitterMode ?? "volume")) { Text("volume").tag("volume"); Text("outline").tag("outline"); Text("surface").tag("surface") }
-        HStack { Text("Cells").fontWeight(.medium); Spacer(); Button("Add", systemImage: "plus") { update { $0.emitterCells = ($0.emitterCells ?? []) + [.init()] } } }
-        ForEach(layer.emitterCells ?? []) { cell in
-            DisclosureGroup(cell.name) {
-                TextField("Name", text: emitterBinding(cell.id, \.name, cell.name)).textFieldStyle(.roundedBorder)
-                emitterField("Birth Rate", cell, \.birthRate); emitterField("Lifetime", cell, \.lifetime); emitterField("Lifetime Range", cell, \.lifetimeRange)
-                emitterField("Velocity", cell, \.velocity); emitterField("Velocity Range", cell, \.velocityRange); emitterField("Emission Longitude", cell, \.emissionLongitude)
-                emitterField("Emission Latitude", cell, \.emissionLatitude); emitterField("Emission Range", cell, \.emissionRange); emitterField("Scale", cell, \.scale); emitterField("Scale Range", cell, \.scaleRange); emitterField("Scale Speed", cell, \.scaleSpeed)
-                emitterField("Alpha Range", cell, \.alphaRange); emitterField("Alpha Speed", cell, \.alphaSpeed); emitterField("Spin", cell, \.spin); emitterField("Spin Range", cell, \.spinRange)
-                emitterField("X Acceleration", cell, \.xAcceleration); emitterField("Y Acceleration", cell, \.yAcceleration)
-                Button("Remove Cell", role: .destructive) { update { $0.emitterCells?.removeAll { $0.id == cell.id } } }
-            }.padding(10).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+
+        VStack(alignment: .leading, spacing: 6) {
+            HStack { Text("Speed").font(.caption).foregroundStyle(.secondary); Spacer(); Text(layer.speed.formatted(.number.precision(.fractionLength(2)))).monospacedDigit() }
+            Slider(value: value(\.speed, layer.speed), in: -2...2, step: 0.01)
+                .disabled(inState)
+            HStack {
+                ForEach([-2.0, -1, 0, 1, 2], id: \.self) { mark in
+                    Text(mark.formatted(.number.precision(.fractionLength(0)))).font(.caption2).foregroundStyle(.secondary)
+                    if mark != 2 { Spacer() }
+                }
+            }
+        }
+
+        HStack {
+            Text("Cells").fontWeight(.medium)
+            Spacer()
+            Button("+ Add Cell") { emitterImageTargetID = nil; emitterImageImporterOpen = true }
+                .buttonStyle(.bordered)
+                .disabled(inState)
+        }
+
+        ForEach(Array((layer.emitterCells ?? []).enumerated()), id: \.element.id) { index, cell in
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 10) {
+                        emitterCellThumbnail(cell)
+                        Button("Change Image") { emitterImageTargetID = cell.id; emitterImageImporterOpen = true }
+                            .buttonStyle(.bordered)
+                            .disabled(inState)
+                    }
+                    emitterSlider("Contents Scale", cell, \.contentsScale, range: 0...4, step: 0.01, disabled: inState)
+                    emitterField("Birth Rate", cell, \.birthRate, disabled: inState)
+                    emitterField("Lifetime", cell, \.lifetime, disabled: inState)
+                    emitterField("Lifetime Range", cell, \.lifetimeRange, disabled: inState)
+                    emitterField("Velocity", cell, \.velocity, disabled: inState)
+                    emitterField("Velocity Range", cell, \.velocityRange, disabled: inState)
+                    emitterAngle("Emission Longitude", cell, \.emissionLongitude, disabled: inState)
+                    emitterAngle("Emission Latitude", cell, \.emissionLatitude, disabled: inState)
+                    emitterAngle("Emission Range", cell, \.emissionRange, disabled: inState)
+                    emitterAngle("Spin", cell, \.spin, disabled: inState)
+                    emitterAngle("Spin Range", cell, \.spinRange, disabled: inState)
+                    emitterSlider("Scale", cell, \.scale, range: 0...4, step: 0.01, disabled: inState)
+                    emitterSlider("Scale Range", cell, \.scaleRange, range: 0...4, step: 0.01, disabled: inState)
+                    emitterSlider("Scale Speed", cell, \.scaleSpeed, range: -4...4, step: 0.01, disabled: inState)
+                    emitterSlider("Alpha", cell, \.alpha, range: 0...1, step: 0.01, disabled: inState)
+                    emitterSlider("Alpha Range", cell, \.alphaRange, range: -1...1, step: 0.01, disabled: inState)
+                    emitterSlider("Alpha Speed", cell, \.alphaSpeed, range: -1...1, step: 0.01, disabled: inState)
+                    emitterField("X Acceleration", cell, \.xAcceleration, disabled: inState)
+                    emitterField("Y Acceleration", cell, \.yAcceleration, disabled: inState)
+
+                    DisclosureGroup("Advanced Color Controls") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ColorPicker("Color", selection: emitterColorBinding(cell))
+                                .disabled(inState)
+                            emitterSlider("Red Range", cell, \.redRange, range: -1...1, step: 0.01, disabled: inState)
+                            emitterSlider("Red Speed", cell, \.redSpeed, range: -1...1, step: 0.01, disabled: inState)
+                            emitterSlider("Green Range", cell, \.greenRange, range: -1...1, step: 0.01, disabled: inState)
+                            emitterSlider("Green Speed", cell, \.greenSpeed, range: -1...1, step: 0.01, disabled: inState)
+                            emitterSlider("Blue Range", cell, \.blueRange, range: -1...1, step: 0.01, disabled: inState)
+                            emitterSlider("Blue Speed", cell, \.blueSpeed, range: -1...1, step: 0.01, disabled: inState)
+                        }.padding(.top, 8)
+                    }
+
+                    Button("Remove Cell", role: .destructive) { update { $0.emitterCells?.removeAll { $0.id == cell.id } } }
+                        .disabled(inState)
+                }.padding(.top, 8)
+            } label: {
+                HStack(spacing: 8) {
+                    emitterCellThumbnail(cell)
+                    Text("Cell \(index + 1)")
+                }
+            }
+            .padding(10)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+        }
+
+        if inState {
+            Text("Emitter speed and cell controls are not supported for state transitions.")
+                .font(.caption2).foregroundStyle(.secondary)
         }
     }
 
@@ -296,6 +373,7 @@ struct InspectorView: View {
     private func filterName(_ type: String) -> String { switch type { case "gaussianBlur": "Gaussian Blur"; case "colorContrast": "Contrast"; case "colorHueRotate": "Hue Rotate"; case "colorInvert": "Invert"; case "colorSaturate": "Saturate"; case "CISepiaTone": "Sepia"; default: type } }
     private func filterValueLabel(_ type: String) -> String { switch type { case "gaussianBlur": "Radius"; case "colorContrast", "colorSaturate": "Amount"; case "CISepiaTone": "Intensity"; case "colorHueRotate": "Angle"; default: "Value" } }
     private func update(_ mutation: (inout LayerModel) -> Void) { guard let selectedID else { return }; project.root.update(id: selectedID, mutation: mutation) }
+
     @MainActor private func importImage(_ url: URL) async {
         do {
             let imported = try await NativeImageAssetLoader.load(url)
@@ -304,6 +382,71 @@ struct InspectorView: View {
             update { $0.imageName = name }
         } catch { }
     }
+
+    @MainActor private func importEmitterCellImage(_ url: URL, targetID: UUID?) async {
+        do {
+            let imported = try await NativeImageAssetLoader.load(url)
+            let name = project.uniqueAssetName(imported.filename, defaultExtension: "png")
+            project.setAsset(imported.data, named: name)
+            update { layer in
+                if let targetID,
+                   let index = layer.emitterCells?.firstIndex(where: { $0.id == targetID }) {
+                    layer.emitterCells?[index].imageName = name
+                } else {
+                    var cells = layer.emitterCells ?? []
+                    var cell = EmitterCellModel()
+                    cell.imageName = name
+                    cells.append(cell)
+                    layer.emitterCells = cells
+                }
+            }
+        } catch { }
+    }
+
+    @ViewBuilder private func emitterCellThumbnail(_ cell: EmitterCellModel) -> some View {
+        if let name = cell.imageName,
+           let data = project.assetData(named: name),
+           let image = UIImage(data: data) {
+            Image(uiImage: image).resizable().scaledToFit().frame(width: 24, height: 24).clipShape(RoundedRectangle(cornerRadius: 4))
+        } else {
+            Image(systemName: "photo").frame(width: 24, height: 24).foregroundStyle(.secondary)
+        }
+    }
+
+    private func emitterColorBinding(_ cell: EmitterCellModel) -> Binding<Color> {
+        colorBinding(cell.color) { hex in
+            update { layer in
+                if let index = layer.emitterCells?.firstIndex(where: { $0.id == cell.id }) {
+                    layer.emitterCells?[index].color = hex
+                }
+            }
+        }
+    }
+
+    private func emitterSlider(_ title: String, _ cell: EmitterCellModel, _ keyPath: WritableKeyPath<EmitterCellModel, Double>, range: ClosedRange<Double>, step: Double, disabled: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Text(cell[keyPath: keyPath].formatted(.number.precision(.fractionLength(2)))).monospacedDigit()
+            }
+            Slider(value: emitterBinding(cell.id, keyPath, cell[keyPath: keyPath]), in: range, step: step)
+                .disabled(disabled)
+        }
+    }
+
+    private func emitterAngle(_ title: String, _ cell: EmitterCellModel, _ keyPath: WritableKeyPath<EmitterCellModel, Double>, disabled: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Text("\(Int(cell[keyPath: keyPath].rounded()))°").monospacedDigit()
+            }
+            Slider(value: emitterBinding(cell.id, keyPath, cell[keyPath: keyPath]), in: -360...360, step: 1)
+                .disabled(disabled)
+        }
+    }
+
     private func value<T>(_ keyPath: WritableKeyPath<LayerModel, T>, _ fallback: T) -> Binding<T> {
         Binding(get: {
             if let selectedID, let stateKey = stateKey(for: keyPath), case .number(let number) = project.overrideValue(targetID: selectedID, keyPath: stateKey), let typed = number as? T { return typed }
@@ -362,7 +505,7 @@ struct InspectorView: View {
     }
     private func gyroBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<GyroDictionaryModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.gyroDictionaries?.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { value in update { layer in if let index = layer.gyroDictionaries?.firstIndex(where: { $0.id == id }) { layer.gyroDictionaries?[index][keyPath: keyPath] = value } } }) }
     private func emitterBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<EmitterCellModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.emitterCells?.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { value in update { layer in if let index = layer.emitterCells?.firstIndex(where: { $0.id == id }) { layer.emitterCells?[index][keyPath: keyPath] = value } } }) }
-    private func emitterField(_ title: String, _ cell: EmitterCellModel, _ keyPath: WritableKeyPath<EmitterCellModel, Double>) -> some View { LabeledContent(title) { TextField(title, value: emitterBinding(cell.id, keyPath, cell[keyPath: keyPath]), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
+    private func emitterField(_ title: String, _ cell: EmitterCellModel, _ keyPath: WritableKeyPath<EmitterCellModel, Double>, disabled: Bool = false) -> some View { LabeledContent(title) { TextField(title, value: emitterBinding(cell.id, keyPath, cell[keyPath: keyPath]), format: .number).textFieldStyle(.roundedBorder).frame(maxWidth: 120).disabled(disabled) } }
     private func syncFrameBinding(_ state: String, _ fallback: String) -> Binding<String> { Binding(get: { selected?.syncStateFrameMode?[state] ?? fallback }, set: { value in update { var modes = $0.syncStateFrameMode ?? [:]; modes[state] = value; $0.syncStateFrameMode = modes } }) }
     private func filterBinding<T>(_ id: UUID, _ keyPath: WritableKeyPath<FilterModel, T>, _ fallback: T) -> Binding<T> { Binding(get: { selected?.filters.first(where: { $0.id == id })?[keyPath: keyPath] ?? fallback }, set: { new in update { layer in if let i = layer.filters.firstIndex(where: { $0.id == id }) { layer.filters[i][keyPath: keyPath] = new } } }) }
 
