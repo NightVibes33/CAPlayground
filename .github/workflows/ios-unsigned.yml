@@ -6,11 +6,15 @@ on:
     branches: [main]
     paths:
       - "apps/ios/**"
+      - "apps/web/app/api/drive/**"
+      - "apps/web/app/api/wallpapers/submit/**"
       - "scripts/package_unsigned_ipa.sh"
       - ".github/workflows/ios-unsigned.yml"
   pull_request:
     paths:
       - "apps/ios/**"
+      - "apps/web/app/api/drive/**"
+      - "apps/web/app/api/wallpapers/submit/**"
       - "scripts/package_unsigned_ipa.sh"
       - ".github/workflows/ios-unsigned.yml"
 
@@ -22,6 +26,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  web-api:
+    name: Validate native companion APIs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Type-check website and native companion APIs
+        run: npx tsc --noEmit --pretty false
+
   build:
     name: Build unsigned arm64 iPhoneOS IPA
     runs-on: macos-26
