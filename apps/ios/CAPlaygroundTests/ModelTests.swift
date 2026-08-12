@@ -9,11 +9,13 @@ final class ModelTests: XCTestCase {
         let encoded = try encoder.encode(project)
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         object.removeValue(forKey: "assets")
+        object.removeValue(forKey: "documentAssets")
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let decoded = try decoder.decode(CAProjectDocument.self, from: JSONSerialization.data(withJSONObject: object))
         XCTAssertTrue(decoded.assets.isEmpty)
+        XCTAssertTrue(decoded.documentAssets.isEmpty)
     }
 
     func testProjectRoundTripPreservesNativeLayerTree() throws {
@@ -82,7 +84,7 @@ final class ModelTests: XCTestCase {
         )
         let archive = try CAArchiveExporter.export(project: project, format: .ca, license: .none)
         let imported = try CAArchiveImporter.importProject(data: archive, suggestedName: "Fixture.ca")
-        XCTAssertEqual(imported.name, "Fixture.ca")
+        XCTAssertEqual(imported.name, "Fixture")
         XCTAssertEqual(imported.documents[.floating]?.root.children.first?.name, "Imported Text")
         XCTAssertEqual(imported.documents[.floating]?.root.children.first?.text, "Hello")
         XCTAssertEqual(imported.documents[.floating]?.root.children.first?.fontFamily, "SFProText-Regular")
@@ -194,6 +196,33 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(imported.documents[.floating]?.stateOverrides["Locked"]?.first?.value, .number(0.25))
         XCTAssertEqual(imported.documents[.floating]?.stateTransitions.first?.fromState, "Locked")
         XCTAssertEqual(imported.documents[.floating]?.stateTransitions.first?.elements.first?.animation?.damping, 14)
+    }
+
+    func testArchivePreservesSameNamedAssetsPerCADocument() throws {
+        var project = CAProjectDocument.blank(name: "Scoped Assets")
+        let backgroundBytes = Data([1, 2, 3, 4])
+        let floatingBytes = Data([9, 8, 7, 6])
+        project.setAsset(backgroundBytes, named: "shared.png", in: .background)
+        project.setAsset(floatingBytes, named: "shared.png", in: .floating)
+
+        let archive = try CAArchiveExporter.export(project: project, format: .ca, license: .none)
+        let entries = try ZIPArchive.extract(archive)
+        XCTAssertEqual(entries.first(where: { $0.path == "Background.ca/assets/shared.png" })?.data, backgroundBytes)
+        XCTAssertEqual(entries.first(where: { $0.path == "Floating.ca/assets/shared.png" })?.data, floatingBytes)
+
+        let imported = try CAArchiveImporter.importProject(data: archive, suggestedName: "Scoped.ca")
+        XCTAssertEqual(imported.documentAssets[.background]?["shared.png"], backgroundBytes)
+        XCTAssertEqual(imported.documentAssets[.floating]?["shared.png"], floatingBytes)
+        XCTAssertEqual(imported.assets(for: .background)["shared.png"], backgroundBytes)
+        XCTAssertEqual(imported.assets(for: .floating)["shared.png"], floatingBytes)
+    }
+
+    func testLegacyFlatAssetsRemainAvailableToEveryCA() {
+        var project = CAProjectDocument.blank()
+        let bytes = Data([4, 2])
+        project.assets["legacy.png"] = bytes
+        XCTAssertEqual(project.assets(for: .background)["legacy.png"], bytes)
+        XCTAssertEqual(project.assets(for: .floating)["legacy.png"], bytes)
     }
 
     func testLayerDuplicateRefreshesEveryID() {
