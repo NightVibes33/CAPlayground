@@ -89,7 +89,7 @@ enum ZIPArchive {
 }
 
 private extension Data {
-    mutating func appendLE<T: FixedWidthInteger>(_ value: T) { var value = value.littleEndian; withUnsafeBytes(of: &value) { append(contentsOf: $0) } }
+    mutating func appendLE<T: FixedWidthInteger>(_ value: T) { var value = value.littleEndian; Swift.withUnsafeBytes(of: &value) { append(contentsOf: $0) } }
     func u16(at offset: Int) -> UInt16 { UInt16(self[offset]) | UInt16(self[offset + 1]) << 8 }
     func u32(at offset: Int) -> UInt32 { UInt32(self[offset]) | UInt32(self[offset + 1]) << 8 | UInt32(self[offset + 2]) << 16 | UInt32(self[offset + 3]) << 24 }
     mutating func replaceLE(at offset: Int, value: UInt32) { self[offset] = UInt8(value & 0xff); self[offset + 1] = UInt8((value >> 8) & 0xff); self[offset + 2] = UInt8((value >> 16) & 0xff); self[offset + 3] = UInt8((value >> 24) & 0xff) }
