@@ -11,19 +11,24 @@ struct CAProjectDocument: Codable, Identifiable, Hashable {
     var gyroEnabled: Bool
     var activeCA: CADocumentKind
     var documents: [CADocumentKind: AnimationDocument]
+    // Legacy project-wide assets are retained for backwards compatibility with existing native projects.
     var assets: [String: Data] = [:]
+    // Website projects scope assets to each Background.ca/Floating.ca/Wallpaper.ca package.
+    var documentAssets: [CADocumentKind: [String: Data]] = [:]
     var modifiedAt: Date
 
     private enum CodingKeys: String, CodingKey {
         case id, name, width, height, background, geometryFlipped, gyroEnabled
-        case activeCA, documents, assets, modifiedAt
+        case activeCA, documents, assets, documentAssets, modifiedAt
     }
 
     init(
         id: UUID, name: String, width: Double, height: Double,
         background: String?, geometryFlipped: Bool, gyroEnabled: Bool,
         activeCA: CADocumentKind, documents: [CADocumentKind: AnimationDocument],
-        assets: [String: Data] = [:], modifiedAt: Date
+        assets: [String: Data] = [:],
+        documentAssets: [CADocumentKind: [String: Data]] = [:],
+        modifiedAt: Date
     ) {
         self.id = id
         self.name = name
@@ -35,6 +40,7 @@ struct CAProjectDocument: Codable, Identifiable, Hashable {
         self.activeCA = activeCA
         self.documents = documents
         self.assets = assets
+        self.documentAssets = documentAssets
         self.modifiedAt = modifiedAt
     }
 
@@ -50,6 +56,7 @@ struct CAProjectDocument: Codable, Identifiable, Hashable {
         activeCA = try values.decode(CADocumentKind.self, forKey: .activeCA)
         documents = try values.decode([CADocumentKind: AnimationDocument].self, forKey: .documents)
         assets = try values.decodeIfPresent([String: Data].self, forKey: .assets) ?? [:]
+        documentAssets = try values.decodeIfPresent([CADocumentKind: [String: Data]].self, forKey: .documentAssets) ?? [:]
         modifiedAt = try values.decode(Date.self, forKey: .modifiedAt)
     }
 
@@ -76,6 +83,46 @@ struct CAProjectDocument: Codable, Identifiable, Hashable {
     var stateTransitions: [StateTransition] {
         get { documents[activeCA]!.stateTransitions }
         set { documents[activeCA]!.stateTransitions = newValue }
+    }
+
+    func assets(for kind: CADocumentKind) -> [String: Data] {
+        var merged = assets
+        if let scoped = documentAssets[kind] {
+            for (name, data) in scoped { merged[name] = data }
+        }
+        return merged
+    }
+
+    func assetData(named name: String, in kind: CADocumentKind? = nil) -> Data? {
+        let target = kind ?? activeCA
+        return documentAssets[target]?[name] ?? assets[name]
+    }
+
+    func hasAsset(named name: String, in kind: CADocumentKind? = nil) -> Bool {
+        assetData(named: name, in: kind) != nil
+    }
+
+    func uniqueAssetName(_ proposed: String, in kind: CADocumentKind? = nil, defaultExtension: String = "png") -> String {
+        let target = kind ?? activeCA
+        guard hasAsset(named: proposed, in: target) else { return proposed }
+        let url = URL(fileURLWithPath: proposed)
+        let base = url.deletingPathExtension().lastPathComponent.isEmpty ? "Asset" : url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension.isEmpty ? defaultExtension : url.pathExtension
+        var candidate: String
+        repeat { candidate = "\(base)-\(UUID().uuidString.prefix(8)).\(ext)" } while hasAsset(named: candidate, in: target)
+        return candidate
+    }
+
+    mutating func setAsset(_ data: Data, named name: String, in kind: CADocumentKind? = nil) {
+        let target = kind ?? activeCA
+        documentAssets[target, default: [:]][name] = data
+        // Keep one legacy copy for old code/projects without allowing a same-name asset in another CA to destroy it.
+        if assets[name] == nil { assets[name] = data }
+    }
+
+    mutating func removeAsset(named name: String, in kind: CADocumentKind? = nil) {
+        let target = kind ?? activeCA
+        documentAssets[target]?.removeValue(forKey: name)
     }
 
     static func blank(name: String = "Untitled Wallpaper") -> Self {
