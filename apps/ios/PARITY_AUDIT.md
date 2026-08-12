@@ -32,7 +32,7 @@ This file is an engineering checklist for the native conversion. A surface is on
 - [ ] Canvas preview/pan/zoom/selection/handles/guides
 - [ ] Device preview/clock/lock screen
 - [ ] Gyro controls
-- [ ] Timeline ruler/playhead/tree/zoom/repeat/autoreverse/resize/snapping
+- [ ] Timeline ruler/playhead/tree/zoom/repeat/autoreverse/resize/snapping — website component implemented; Shift-key 0.5s resize snapping still requires hardware-keyboard parity verification; full iOS CI pending.
 - [ ] Geometry inspector
 - [ ] Content inspector
 - [ ] Text inspector
@@ -43,7 +43,7 @@ This file is an engineering checklist for the native conversion. A surface is on
 - [ ] Replicator inspector
 - [ ] Filters inspector
 - [ ] Compositing inspector
-- [ ] Animations inspector/keyframes/bulk input/export — website control set implemented; awaiting full iOS CI verification.
+- [x] Animations inspector/keyframes/bulk input/export — website control set implemented and verified by normal iOS CI run #110.
 - [ ] Gyro inspector
 - [ ] Blur editor
 - [ ] Export dialog and success actions
@@ -74,4 +74,5 @@ This file is an engineering checklist for the native conversion. A surface is on
 - `.ca` and `.tendies` UTTypes/document types registered for native opening.
 - Opening documents in place enabled.
 - Full Layers panel restored from the last green implementation before applying mobile-only deltas.
-- Animation inspector now mirrors website-supported key paths, duplicate filtering, gradient-only `colors`, empty new animations, current-value keyframes, custom key times, duration/loop/repeat/advanced controls, typed value editors, Bulk text plus `.txt/.csv` import, value export, and removal; CI verification pending.
+- Animation inspector mirrors website-supported key paths, duplicate filtering, gradient-only `colors`, empty new animations, current-value keyframes, custom key times, duration/loop/repeat/advanced controls, typed value editors, Bulk text plus `.txt/.csv` import, value export, and removal; run #110 passed simulator tests, device archive, package verification, and IPA upload.
+- Timeline now mirrors website ruler/tree/playhead/zoom/label-resize/repeat/autoreverse/speed-aware bars/duration-resize behavior; hardware Shift snapping and CI remain open.
