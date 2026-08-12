@@ -11,6 +11,26 @@
 <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
 <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>com.nightvibes33.caplayground.auth</string><key>CFBundleURLSchemes</key><array><string>caplayground</string></array></dict></array>
+<key>UTImportedTypeDeclarations</key><array>
+<dict>
+<key>UTTypeIdentifier</key><string>com.nightvibes33.caplayground.ca-archive</string>
+<key>UTTypeDescription</key><string>Core Animation Archive</string>
+<key>UTTypeConformsTo</key><array><string>public.data</string></array>
+<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>ca</string></array></dict>
+</dict>
+</array>
+<key>UTExportedTypeDeclarations</key><array>
+<dict>
+<key>UTTypeIdentifier</key><string>com.nightvibes33.caplayground.tendies</string>
+<key>UTTypeDescription</key><string>CAPlayground Tendies Wallpaper</string>
+<key>UTTypeConformsTo</key><array><string>public.zip-archive</string></array>
+<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>tendies</string></array><key>public.mime-type</key><string>application/zip</string></dict>
+</dict>
+</array>
+<key>CFBundleDocumentTypes</key><array>
+<dict><key>CFBundleTypeName</key><string>Core Animation Archive</string><key>CFBundleTypeRole</key><string>Editor</string><key>LSHandlerRank</key><string>Alternate</string><key>LSItemContentTypes</key><array><string>com.nightvibes33.caplayground.ca-archive</string></array></dict>
+<dict><key>CFBundleTypeName</key><string>CAPlayground Tendies Wallpaper</string><key>CFBundleTypeRole</key><string>Editor</string><key>LSHandlerRank</key><string>Owner</string><key>LSItemContentTypes</key><array><string>com.nightvibes33.caplayground.tendies</string></array></dict>
+</array>
 <key>LSApplicationCategoryType</key><string>public.app-category.graphics-design</string>
 <key>UILaunchScreen</key><dict/>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
