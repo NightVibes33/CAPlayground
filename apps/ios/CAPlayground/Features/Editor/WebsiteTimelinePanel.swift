@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct WebsiteTimelinePanel: View {
     @Binding var project: CAProjectDocument
@@ -10,6 +11,7 @@ struct WebsiteTimelinePanel: View {
     @State private var labelWidth: CGFloat = 100
     @State private var labelResizeStart: CGFloat?
     @State private var rulerDragging = false
+    @State private var shiftDown = false
 
     private let duration = 600.0
     private let rowHeight: CGFloat = 24
@@ -62,8 +64,10 @@ struct WebsiteTimelinePanel: View {
 
                                         Rectangle()
                                             .fill(CATheme.accent.opacity(0.10))
-                                            .frame(width: max(0, min(trackWidth, CGFloat(currentTime) * pxPerSecond)),
-                                                   height: rulerHeight + CGFloat(rows.count) * rowHeight)
+                                            .frame(
+                                                width: max(0, min(trackWidth, CGFloat(currentTime) * pxPerSecond)),
+                                                height: rulerHeight + CGFloat(rows.count) * rowHeight
+                                            )
 
                                         Rectangle()
                                             .fill(CATheme.accent)
@@ -113,6 +117,7 @@ struct WebsiteTimelinePanel: View {
         .padding(6)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+        .background(TimelineModifierCapture(isShiftDown: $shiftDown).frame(width: 1, height: 1))
     }
 
     private func labelColumn(_ rows: [TimelineDisplayRow]) -> some View {
@@ -232,7 +237,8 @@ struct WebsiteTimelinePanel: View {
                 pxPerSecond: pxPerSecond,
                 timelineDuration: duration,
                 rowHeight: rowHeight,
-                color: animationColor(animation.keyPath)
+                color: animationColor(animation.keyPath),
+                shiftDown: shiftDown
             )
         }
     }
@@ -301,6 +307,7 @@ private struct TimelineAnimationTrack: View {
     let timelineDuration: Double
     let rowHeight: CGFloat
     let color: Color
+    let shiftDown: Bool
 
     @State private var localDuration: Double?
     @State private var startDuration = 1.0
@@ -361,7 +368,8 @@ private struct TimelineAnimationTrack: View {
                                 Text(String(format: "%.1fs", effective))
                                     .font(.system(size: 10, weight: .medium))
                                     .foregroundStyle(Color(.systemBackground))
-                                    .padding(.horizontal, 5).padding(.vertical, 2)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
                                     .background(Color.primary, in: RoundedRectangle(cornerRadius: 4))
                                     .offset(x: 18, y: -24)
                             }
@@ -382,13 +390,10 @@ private struct TimelineAnimationTrack: View {
                     startDuration = animation.duration
                     localDuration = animation.duration
                 }
-                let speed = animation.speed
-                let deltaEffective = Double(value.translation.width / max(pxPerSecond, 0.0001))
-                let delta = deltaEffective * speed
-                localDuration = (max(0.1, startDuration + delta) * 10).rounded() / 10
+                localDuration = calculatedDuration(animation, translation: value.translation.width)
             }
-            .onEnded { _ in
-                let final = localDuration ?? animation.duration
+            .onEnded { value in
+                let final = calculatedDuration(animation, translation: value.translation.width)
                 project.root.update(id: layerID) { layer in
                     guard let index = layer.animations.firstIndex(where: { $0.id == animationID }) else { return }
                     layer.animations[index].duration = final
@@ -397,8 +402,65 @@ private struct TimelineAnimationTrack: View {
             }
     }
 
+    private func calculatedDuration(_ animation: KeyframeAnimationModel, translation: CGFloat) -> Double {
+        let speed = animation.speed
+        let deltaEffective = Double(translation / max(pxPerSecond, 0.0001))
+        let delta = deltaEffective * speed
+        var next = max(0.1, startDuration + delta)
+        if shiftDown {
+            next = max(0.1, (next * 2).rounded() / 2)
+        } else {
+            next = (next * 10).rounded() / 10
+        }
+        return next
+    }
+
     private func durationText(_ duration: Double, speed: Double) -> String {
         let base = String(format: "%.1fs", duration)
         return speed == 1 ? base : "\(base) @ \(String(format: "%.1f", speed))x"
+    }
+}
+
+private struct TimelineModifierCapture: UIViewRepresentable {
+    @Binding var isShiftDown: Bool
+
+    func makeUIView(context: Context) -> TimelineModifierView {
+        let view = TimelineModifierView()
+        view.onModifierChange = { value in isShiftDown = value }
+        DispatchQueue.main.async { _ = view.becomeFirstResponder() }
+        return view
+    }
+
+    func updateUIView(_ uiView: TimelineModifierView, context: Context) {
+        uiView.onModifierChange = { value in isShiftDown = value }
+        if !uiView.isFirstResponder {
+            DispatchQueue.main.async { _ = uiView.becomeFirstResponder() }
+        }
+    }
+}
+
+private final class TimelineModifierView: UIView {
+    var onModifierChange: ((Bool) -> Void)?
+
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        onModifierChange?(event?.modifierFlags.contains(.shift) == true)
+        super.pressesBegan(presses, with: event)
+    }
+
+    override func pressesChanged(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        onModifierChange?(event?.modifierFlags.contains(.shift) == true)
+        super.pressesChanged(presses, with: event)
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        onModifierChange?(event?.modifierFlags.contains(.shift) == true)
+        super.pressesEnded(presses, with: event)
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        onModifierChange?(false)
+        super.pressesCancelled(presses, with: event)
     }
 }
