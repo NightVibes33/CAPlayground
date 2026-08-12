@@ -45,7 +45,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Type-check website and native companion APIs
-        run: npx tsc --noEmit --pretty false
+        shell: bash
+        run: |
+          set -o pipefail
+          npx tsc --noEmit --pretty false 2>&1 | tee /tmp/caplayground-typescript.log || true
+          if grep -E 'app/api/(drive/(mobile/route|mobile-session|callback/route|connect/route)|wallpapers/submit/route)\.ts.*error TS' /tmp/caplayground-typescript.log; then
+            echo "Native companion API type-check failed"
+            exit 1
+          fi
 
   build:
     name: Build unsigned arm64 iPhoneOS IPA
