@@ -19,7 +19,7 @@ struct CAPlaygroundApp: App {
                     appearance == "dark" ? .dark : appearance == "light" ? .light : nil
                 )
                 .onOpenURL { url in Task { await auth.handleIncomingURL(url) } }
-                .sheet(isPresented: resetBinding) { ResetPasswordView() }
+                .sheet(isPresented: resetBinding) { WebsiteResetPasswordView() }
         }
     }
 }
