@@ -15,6 +15,8 @@ struct SignInView: View {
     @State private var password = ""
     @State private var showTerms = false
     @State private var showPrivacy = false
+    @State private var oauthProvider: String?
+    @State private var showAuthSuccess = false
 
     var body: some View {
         ScrollView {
@@ -43,9 +45,34 @@ struct SignInView: View {
         }
         .background(Color(.systemBackground).ignoresSafeArea())
         .navigationBarBackButtonHidden()
-        .onChange(of: auth.isSignedIn) { _, signedIn in if signedIn { dismiss() } }
+        .onChange(of: auth.isSignedIn) { _, signedIn in
+            guard signedIn else { return }
+            if oauthProvider != nil {
+                showAuthSuccess = true
+            } else {
+                dismiss()
+            }
+        }
+        .onChange(of: auth.error) { _, error in
+            if error != nil && !auth.isSignedIn { oauthProvider = nil }
+        }
+        .onChange(of: auth.isLoading) { _, loading in
+            if !loading && !auth.isSignedIn && auth.error == nil { oauthProvider = nil }
+        }
         .navigationDestination(isPresented: $showTerms) { TermsOfServiceView() }
         .navigationDestination(isPresented: $showPrivacy) { PrivacyPolicyView() }
+        .fullScreenCover(isPresented: $showAuthSuccess) {
+            NavigationStack {
+                WebsiteAuthSuccessView(providerHint: oauthProvider) {
+                    showAuthSuccess = false
+                    oauthProvider = nil
+                    dismiss()
+                } onBackToSignIn: {
+                    showAuthSuccess = false
+                    oauthProvider = nil
+                }
+            }
+        }
     }
 
     private var card: some View {
@@ -80,6 +107,7 @@ struct SignInView: View {
             }
             messages
             Button {
+                oauthProvider = nil
                 Task { _ = await auth.signIn(email: emailOrUsername, password: password) }
             } label: {
                 Text(auth.isLoading ? "Signing In..." : "Sign In").frame(maxWidth: .infinity)
@@ -107,6 +135,7 @@ struct SignInView: View {
             messages
             legalAgreement
             Button {
+                oauthProvider = nil
                 Task {
                     if await auth.signUp(username: signupUsername, email: email, password: password) { mode = .signIn }
                 }
@@ -180,7 +209,10 @@ struct SignInView: View {
     }
 
     private func providerButton(_ title: String, provider: String, symbol: String) -> some View {
-        Button { auth.signIn(provider: provider) } label: {
+        Button {
+            oauthProvider = provider
+            auth.signIn(provider: provider)
+        } label: {
             Label(title, systemImage: symbol).frame(maxWidth: .infinity)
         }.buttonStyle(CAWebButtonStyle(variant: .outline)).disabled(auth.isLoading)
     }
@@ -190,4 +222,313 @@ struct SignInView: View {
     }
 
     private func clearMessages() { auth.error = nil; auth.message = nil }
+}
+
+private struct WebsiteAuthSuccessView: View {
+    private enum Status { case checking, needUsername, ready, notSignedIn }
+
+    @Environment(AuthStore.self) private var auth
+    let providerHint: String?
+    let onContinue: () -> Void
+    let onBackToSignIn: () -> Void
+
+    @State private var status: Status = .checking
+    @State private var username = ""
+    @State private var profileUsername = ""
+    @State private var provider = "email"
+    @State private var accountEmail = ""
+    @State private var saving = false
+    @State private var localError: String?
+
+    var body: some View {
+        ScrollView {
+            VStack {
+                Group {
+                    if status == .checking {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Completing sign-in…").font(.title2.bold())
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("Verifying session").foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        VStack(spacing: 18) {
+                            Text(title)
+                                .font(.system(size: status == .ready ? 30 : 28, weight: .bold))
+                                .multilineTextAlignment(.center)
+                            content
+                        }
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: 448)
+                .caPanel()
+            }
+            .frame(maxWidth: .infinity, minHeight: 700)
+            .padding(16)
+        }
+        .background(Color(.systemBackground).ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .task { await checkSession() }
+    }
+
+    private var title: String {
+        switch status {
+        case .checking: "Completing sign-in…"
+        case .needUsername: "Choose a username"
+        case .ready: "You're signed in"
+        case .notSignedIn: "Sign-in failed or expired"
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch status {
+        case .checking:
+            EmptyView()
+        case .needUsername:
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Username").font(.subheadline.weight(.medium))
+                    TextField("Pick a username", text: $username)
+                        .textInputAutocapitalization(.never)
+                        .textFieldStyle(.roundedBorder)
+                    Text("3–20 chars. Letters, numbers, and ! - _ . only.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let localError { Text(localError).font(.subheadline).foregroundStyle(.red) }
+                Button {
+                    saveUsername()
+                } label: {
+                    Text(saving ? "Saving…" : "Save username").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(CAWebButtonStyle(variant: .accent))
+                .disabled(saving)
+            }
+        case .ready:
+            VStack(spacing: 14) {
+                HStack(spacing: 16) {
+                    Image(systemName: providerSymbol)
+                        .font(.system(size: 27))
+                        .frame(width: 48, height: 48)
+                        .overlay(Circle().stroke(Color(.separator), lineWidth: 2))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(profileUsername.isEmpty ? "(no username)" : profileUsername)
+                            .font(.headline)
+                        Text(accountEmail.isEmpty ? "(no email)" : accountEmail)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(16)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(.separator)))
+
+                Button("Continue") { onContinue() }
+                    .buttonStyle(CAWebButtonStyle(variant: .accent))
+                    .frame(maxWidth: .infinity)
+                NavigationLink("Create a Project") { ProjectsView() }
+                    .buttonStyle(CAWebButtonStyle(variant: .outline))
+                    .frame(maxWidth: .infinity)
+                NavigationLink("Account Dashboard") { DashboardView() }
+                    .buttonStyle(CAWebButtonStyle(variant: .outline))
+                    .frame(maxWidth: .infinity)
+                Button("Sign out", role: .destructive) {
+                    Task {
+                        await auth.signOut()
+                        onBackToSignIn()
+                    }
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(CATheme.destructive, in: RoundedRectangle(cornerRadius: 8))
+            }
+        case .notSignedIn:
+            VStack(spacing: 16) {
+                Text("Please try again.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button("Back to sign in") { onBackToSignIn() }
+                    .buttonStyle(CAWebButtonStyle(variant: .outline))
+            }
+        }
+    }
+
+    private var providerSymbol: String {
+        switch provider.lowercased() {
+        case "google": "g.circle"
+        case "github": "chevron.left.forwardslash.chevron.right"
+        case "discord": "bubble.left.and.bubble.right"
+        default: "envelope"
+        }
+    }
+
+    private func checkSession() async {
+        await auth.refreshUser()
+        guard let user = auth.user else {
+            status = .notSignedIn
+            return
+        }
+
+        accountEmail = user.email ?? ""
+        provider = providerHint ?? string(user.appMetadata?["provider"]) ?? user.identities?.first?.provider ?? "email"
+        if !auth.username.isEmpty {
+            profileUsername = auth.username
+            status = .ready
+        } else {
+            username = suggestedUsername(from: user)
+            status = .needUsername
+        }
+    }
+
+    private func saveUsername() {
+        localError = nil
+        guard username.range(of: "^[A-Za-z0-9!._-]{3,20}$", options: .regularExpression) != nil else {
+            localError = "Username must be 3-20 chars and only letters, numbers, and ! - _ ."
+            return
+        }
+        saving = true
+        Task {
+            auth.error = nil
+            await auth.saveUsername(username)
+            saving = false
+            if let error = auth.error {
+                localError = error
+            } else {
+                profileUsername = username
+                status = .ready
+            }
+        }
+    }
+
+    private func suggestedUsername(from user: AuthUser) -> String {
+        var candidates: [String] = []
+        let meta = user.userMetadata ?? [:]
+        for key in ["user_name", "preferred_username", "name", "full_name"] {
+            if let value = string(meta[key]) { candidates.append(value) }
+        }
+        for identity in user.identities ?? [] {
+            for key in ["user_name", "login", "username", "global_name"] {
+                if let value = string(identity.identityData?[key]) { candidates.append(value) }
+            }
+        }
+        for raw in candidates {
+            let clean = String(raw.filter { $0.isLetter || $0.isNumber || "!._-".contains($0) }.prefix(20))
+            if clean.range(of: "^[A-Za-z0-9!._-]{3,20}$", options: .regularExpression) != nil { return clean }
+        }
+        return ""
+    }
+
+    private func string(_ value: JSONValue?) -> String? {
+        guard case .string(let text) = value else { return nil }
+        return text
+    }
+}
+
+struct WebsiteResetPasswordView: View {
+    @Environment(AuthStore.self) private var auth
+    @State private var password = ""
+    @State private var confirmation = ""
+    @State private var checking = true
+    @State private var updating = false
+    @State private var localError: String?
+    @State private var successMessage: String?
+
+    var body: some View {
+        ScrollView {
+            VStack {
+                VStack(spacing: 20) {
+                    Text("Set a new password")
+                        .font(.system(size: 36, weight: .bold))
+                        .multilineTextAlignment(.center)
+
+                    if checking {
+                        Text("Verifying your reset link...")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else if auth.user != nil {
+                        passwordField("New Password", placeholder: "Create a new password", text: $password)
+                        passwordField("Confirm Password", placeholder: "Re-enter your password", text: $confirmation)
+
+                        if let localError {
+                            Text(localError).font(.subheadline).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if let successMessage {
+                            Text(successMessage).font(.subheadline).foregroundStyle(.green).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        Button {
+                            updatePassword()
+                        } label: {
+                            Text(updating ? "Updating..." : "Update password").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(CAWebButtonStyle(variant: .accent))
+                        .disabled(updating)
+
+                        Button("Back to sign in") { auth.requiresPasswordReset = false }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(CATheme.accent)
+                    } else {
+                        Text("Verifying your reset link...")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: 448)
+                .caPanel()
+            }
+            .frame(maxWidth: .infinity, minHeight: 650)
+            .padding(16)
+        }
+        .background(Color(.systemBackground).ignoresSafeArea())
+        .interactiveDismissDisabled()
+        .task {
+            await auth.refreshUser()
+            checking = false
+        }
+    }
+
+    private func passwordField(_ label: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label).font(.subheadline.weight(.medium))
+            HStack {
+                Image(systemName: "lock").foregroundStyle(.secondary)
+                SecureField(placeholder, text: text).textContentType(.newPassword)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 42)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(.separator)))
+        }
+    }
+
+    private func updatePassword() {
+        localError = nil
+        successMessage = nil
+        guard password.count >= 8 else {
+            localError = "Password must be at least 8 characters"
+            return
+        }
+        guard password == confirmation else {
+            localError = "Passwords do not match"
+            return
+        }
+        updating = true
+        Task {
+            auth.error = nil
+            if await auth.updatePassword(password) {
+                // Keep the native reset surface open after a successful update so it mirrors
+                // the website's success state instead of disappearing immediately.
+                auth.requiresPasswordReset = true
+                successMessage = "Password updated. You can now continue to the app."
+            } else {
+                localError = auth.error ?? "Failed to update password"
+            }
+            updating = false
+        }
+    }
 }
