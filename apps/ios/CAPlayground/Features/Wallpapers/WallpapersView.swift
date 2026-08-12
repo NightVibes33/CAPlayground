@@ -58,6 +58,7 @@ private struct WallpaperDownloadStat: Codable, Sendable {
 struct WallpapersView: View {
     @Environment(ProjectStore.self) private var store
     @Environment(AuthStore.self) private var auth
+    @Environment(\.colorScheme) private var scheme
 
     private enum SortOrder: String, CaseIterable {
         case oldest = "Oldest to Newest"
@@ -154,8 +155,8 @@ struct WallpapersView: View {
 
     private var controls: some View {
         VStack(spacing: 12) {
-            if auth.isSignedIn { Button { showingSubmission = true } label: { Label("Submit Wallpaper", systemImage: "square.and.arrow.up") }.buttonStyle(.borderedProminent) }
-            else { NavigationLink { SignInView() } label: { Label("Submit Wallpaper", systemImage: "square.and.arrow.up") }.buttonStyle(.borderedProminent) }
+            if auth.isSignedIn { Button { showingSubmission = true } label: { Label("Submit Wallpaper", systemImage: "square.and.arrow.up") }.buttonStyle(CAWebButtonStyle(variant: .accent)) }
+            else { NavigationLink { SignInView() } label: { Label("Submit Wallpaper", systemImage: "square.and.arrow.up") }.buttonStyle(CAWebButtonStyle(variant: .accent)) }
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { searchField; sortPicker }
@@ -184,7 +185,7 @@ struct WallpapersView: View {
             Text(sortOrder.rawValue)
                 .frame(minWidth: 150)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(CAWebButtonStyle(variant: .outline))
     }
 
     private func wallpaperCard(_ item: WallpaperItem) -> some View {
@@ -214,6 +215,7 @@ struct WallpapersView: View {
         }
         .padding(16)
         .caPanel()
+        .overlay { RoundedRectangle(cornerRadius: 8).stroke(CATheme.border(scheme), lineWidth: 1) }
         .contentShape(Rectangle())
     }
 
@@ -239,13 +241,13 @@ struct WallpapersView: View {
                     Label("Download .tendies", systemImage: "arrow.down.circle")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(CAWebButtonStyle(variant: .accent))
 
                 Link(destination: URL(string: "pocketposter://download?url=\(fileURL.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")!) {
                     Label("Open in Pocket Poster", systemImage: "arrow.down.circle")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(CAWebButtonStyle(variant: .accent))
 
                 Button {
                     Task { await openInEditor(item, fileURL: fileURL) }
@@ -253,7 +255,7 @@ struct WallpapersView: View {
                     Label(importingID == item.id ? "Opening..." : "Open in Editor", systemImage: "pencil")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(CAWebButtonStyle(variant: .outline))
                 .disabled(importingID != nil)
             }
 
@@ -261,7 +263,7 @@ struct WallpapersView: View {
                 Label("Watch Tutorial", systemImage: "play.rectangle")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(CAWebButtonStyle(variant: .outline))
         }
     }
 
