@@ -4,6 +4,8 @@ import AVKit
 
 struct DashboardView: View {
     @Environment(AuthStore.self) private var auth
+    @Environment(DriveStore.self) private var drive
+    @Environment(ProjectStore.self) private var projectStore
     @State private var submissions: [WallpaperSubmission] = []
     @State private var loading = true
     @State private var showingSubmission = false
@@ -24,7 +26,7 @@ struct DashboardView: View {
                     Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") { Task { await auth.signOut() } }.buttonStyle(.bordered)
                 }.padding(20).caPanel()
             }.frame(maxWidth: 1000).padding(20).padding(.vertical, 24)
-        }.navigationTitle("Dashboard").task { submissions = await auth.wallpaperSubmissions(); loading = false }
+        }.navigationTitle("Dashboard").task { submissions = await auth.wallpaperSubmissions(); if drive.connected { await drive.refresh() }; loading = false }
             .sheet(isPresented: $showingSubmission) { SubmitWallpaperView { Task { submissions = await auth.wallpaperSubmissions() } } }
     }
 
@@ -61,7 +63,19 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack { Label("Cloud Projects", systemImage: "cloud").font(.title3.bold()); Text("BETA").font(.caption.bold()).foregroundStyle(CATheme.accent) }
             Text("Cloud Projects are stored in your Google Drive account and sync across devices.").foregroundStyle(.secondary)
-            Link("Manage Cloud Projects on CAPlayground", destination: URL(string: "https://caplayground.vercel.app/dashboard")!).buttonStyle(.bordered)
+            if !drive.connected { Button("Connect Google Drive") { drive.connect() }.buttonStyle(.borderedProminent) }
+            else {
+                Menu("Upload Local Project") { ForEach(projectStore.projects) { project in Button(project.name) { Task { await drive.upload(project) } } } }.buttonStyle(.bordered)
+                if drive.files.isEmpty && !drive.isLoading { Text("No cloud projects yet.").font(.caption).foregroundStyle(.secondary) }
+                ForEach(drive.files) { file in
+                    HStack { VStack(alignment: .leading) { Text(file.name); if let size = file.size { Text("\(size) bytes").font(.caption).foregroundStyle(.secondary) } }; Spacer(); Button("Download") { Task { await drive.download(file, into: projectStore) } }; Button(role: .destructive) { Task { await drive.delete(file) } } label: { Image(systemName: "trash") } }
+                        .padding(10).background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                }
+                Button("Sign Out from Google Drive") { drive.disconnect() }.buttonStyle(.bordered)
+            }
+            if drive.isLoading { ProgressView() }
+            if let message = drive.message { Text(message).font(.caption).foregroundStyle(.green) }
+            if let error = drive.error { Text(error).font(.caption).foregroundStyle(.red) }
         }.padding(20).caPanel()
     }
 }
