@@ -212,13 +212,14 @@ final class CoreAnimationRenderer {
             cell.velocity = CGFloat(cellModel.velocity); cell.velocityRange = CGFloat(cellModel.velocityRange)
             cell.emissionLongitude = CGFloat(cellModel.emissionLongitude * .pi / 180); cell.emissionLatitude = CGFloat(cellModel.emissionLatitude * .pi / 180); cell.emissionRange = CGFloat(cellModel.emissionRange * .pi / 180)
             cell.scale = CGFloat(cellModel.scale); cell.scaleRange = CGFloat(cellModel.scaleRange); cell.scaleSpeed = CGFloat(cellModel.scaleSpeed)
-            cell.alpha = Float(cellModel.alpha); cell.alphaRange = Float(cellModel.alphaRange); cell.alphaSpeed = Float(cellModel.alphaSpeed)
+            cell.alphaRange = Float(cellModel.alphaRange); cell.alphaSpeed = Float(cellModel.alphaSpeed)
             cell.spin = CGFloat(cellModel.spin * .pi / 180); cell.spinRange = CGFloat(cellModel.spinRange * .pi / 180)
             cell.xAcceleration = CGFloat(cellModel.xAcceleration); cell.yAcceleration = CGFloat(cellModel.yAcceleration)
             cell.redRange = Float(cellModel.redRange); cell.redSpeed = Float(cellModel.redSpeed)
             cell.greenRange = Float(cellModel.greenRange); cell.greenSpeed = Float(cellModel.greenSpeed)
             cell.blueRange = Float(cellModel.blueRange); cell.blueSpeed = Float(cellModel.blueSpeed)
-            cell.color = UIColor(caHex: cellModel.color)?.cgColor
+            let alpha = min(max(cellModel.alpha, 0), 1)
+            cell.color = UIColor(caHex: cellModel.color)?.withAlphaComponent(CGFloat(alpha)).cgColor
             cell.contents = cellModel.imageName.flatMap { name in assets[name].flatMap(UIImage.init(data:)) ?? UIImage(named: name) }?.cgImage ?? UIImage(systemName: "sparkle")?.withTintColor(.white).cgImage
             return cell
         }
