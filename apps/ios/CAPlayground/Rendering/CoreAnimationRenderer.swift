@@ -175,7 +175,9 @@ final class CoreAnimationRenderer {
             return (assets[name].flatMap(UIImage.init(data:)) ?? UIImage(named: name))?.cgImage
         }
         guard !frames.isEmpty else { return layer }
-        layer.contents = frames[0]
+        let current = min(max(model.currentFrameIndex ?? 0, 0), frames.count - 1)
+        layer.contents = frames[current]
+        if model.syncWithState ?? false { return layer }
         let animation = CAKeyframeAnimation(keyPath: "contents")
         animation.values = frames
         animation.duration = model.videoDuration ?? (Double(frames.count) / max(model.framesPerSecond ?? 30, 1))
@@ -238,8 +240,10 @@ final class CoreAnimationRenderer {
             animation.values = model.numericValues
             animation.keyTimes = model.keyTimes.map(NSNumber.init(value:))
             animation.duration = model.duration
+            animation.speed = Float(model.speed)
             animation.autoreverses = model.autoreverses
             animation.repeatCount = model.repeats ? .infinity : 0
+            if let repeatDuration = model.repeatDurationSeconds, repeatDuration > 0 { animation.repeatDuration = repeatDuration }
             animation.calculationMode = CAAnimationCalculationMode(rawValue: model.calculationMode)
             animation.timingFunction = CAMediaTimingFunction(name: timingName(model.timingFunction))
             layer.add(animation, forKey: "caplayground.\(model.id.uuidString)")
