@@ -34,6 +34,19 @@ struct AuthUser: Codable, Hashable {
     }
 }
 
+struct WallpaperSubmission: Codable, Identifiable, Hashable {
+    var id: Int
+    var name: String
+    var description: String
+    var status: String
+    var submittedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, status
+        case submittedAt = "submitted_at"
+    }
+}
+
 enum JSONValue: Codable, Hashable {
     case string(String), number(Double), bool(Bool), object([String: JSONValue]), array([JSONValue]), null
 
@@ -113,6 +126,7 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
     var isLoading = false
     var message: String?
     var error: String?
+    var requiresPasswordReset = false
 
     private var session: AuthSession?
     private var webAuthenticationSession: ASWebAuthenticationSession?
@@ -223,12 +237,47 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
 
     func sendPasswordReset(email: String) async {
         do {
-            let body = ["email": email, "redirect_to": "https://caplayground.vercel.app/reset-password"]
+            let body = ["email": email, "redirect_to": "caplayground://auth/reset-password"]
             let (_, response) = try await request(path: "/auth/v1/recover", method: "POST", body: body)
             guard (200..<300).contains(response.statusCode) else { throw lastResponseError }
             message = "If the email exists, a reset link has been sent."
             error = nil
         } catch { self.error = error.localizedDescription }
+    }
+
+    func handleIncomingURL(_ url: URL) async {
+        guard url.scheme == "caplayground" else { return }
+        await acceptOAuthCallback(url)
+    }
+
+    func updatePassword(_ password: String) async -> Bool {
+        guard password.count >= 6, let token = await validAccessToken() else {
+            error = "Password must be at least 6 characters."
+            return false
+        }
+        do {
+            let (_, response) = try await request(path: "/auth/v1/user", method: "PUT", body: ["password": password], token: token)
+            guard (200..<300).contains(response.statusCode) else { throw lastResponseError }
+            requiresPasswordReset = false
+            message = "Password updated successfully."
+            return true
+        } catch { self.error = error.localizedDescription; return false }
+    }
+
+    func wallpaperSubmissions() async -> [WallpaperSubmission] {
+        guard let id = user?.id, let token = await validAccessToken() else { return [] }
+        do {
+            let formatter = ISO8601DateFormatter()
+            let (data, response) = try await request(path: "/rest/v1/wallpaper_submissions?user_id=eq.\(id)&select=id,name,description,status,submitted_at&order=submitted_at.desc", token: token)
+            guard response.statusCode == 200 else { throw lastResponseError }
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .custom { decoder in
+                let container = try decoder.singleValueContainer(), value = try container.decode(String.self)
+                let fractional = ISO8601DateFormatter(); fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                guard let date = formatter.date(from: value) ?? fractional.date(from: value) else { throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date") }
+                return date
+            }
+            return try decoder.decode([WallpaperSubmission].self, from: data)
+        } catch { self.error = error.localizedDescription; return [] }
     }
 
     func signOut() async {
@@ -299,6 +348,7 @@ final class AuthStore: NSObject, ASWebAuthenticationPresentationContextProviding
         session = AuthSession(accessToken: access, refreshToken: refresh, expiresAt: .now.addingTimeInterval(expires), user: AuthUser(id: "", email: nil))
         saveSession()
         await refreshUser()
+        requiresPasswordReset = values["type"] == "recovery" || url.host == "reset-password"
     }
 
     private func ensureValidSession() async -> Bool {
