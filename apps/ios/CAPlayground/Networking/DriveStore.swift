@@ -90,7 +90,8 @@ final class DriveStore: NSObject, ASWebAuthenticationPresentationContextProvidin
     func disconnect() {
         session = nil
         files = []
-        message = "Signed out from Google Drive."
+        message = "Signed out from Google Drive successfully."
+        error = nil
     }
 
     func refresh() async {
@@ -182,24 +183,34 @@ final class DriveStore: NSObject, ASWebAuthenticationPresentationContextProvidin
             updateSession(response)
             files.removeAll { $0.id == file.id }
             message = "Deleted \(file.projectName) from Google Drive."
+            error = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
 
-    func deleteAll() async {
-        guard connected else { return }
-        if files.isEmpty { await refresh() }
-        let snapshot = files
-        var failures = 0
-        for file in snapshot {
-            let before = error
-            await delete(file)
-            if error != nil && error != before { failures += 1 }
+    func deleteAll() async -> Bool {
+        guard let session else {
+            error = "Google Drive is not connected."
+            return false
         }
-        if failures == 0 {
+        isLoading = true
+        message = nil
+        error = nil
+        defer { isLoading = false }
+        do {
+            let (_, response) = try await call(
+                method: "POST",
+                session: session,
+                body: ["action": "deleteAll"]
+            )
+            updateSession(response)
             files = []
-            message = "Deleted all cloud projects."
+            message = "All cloud projects have been deleted successfully."
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
         }
     }
 

@@ -5,13 +5,13 @@ import AVKit
 struct DashboardView: View {
     @Environment(AuthStore.self) private var auth
     @Environment(DriveStore.self) private var drive
-    @Environment(ProjectStore.self) private var projectStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var submissions: [WallpaperSubmission] = []
     @State private var loading = true
     @State private var showingSubmission = false
+    @State private var showingDeleteAll = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -33,8 +33,25 @@ struct DashboardView: View {
                 .buttonStyle(CAWebButtonStyle(variant: .ghost, height: 32)).padding(.leading, 12).padding(.top, 10)
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task { submissions = await auth.wallpaperSubmissions(); if drive.connected { await drive.refresh() }; loading = false }
-        .sheet(isPresented: $showingSubmission) { SubmitWallpaperView { Task { submissions = await auth.wallpaperSubmissions() } } }
+        .task {
+            submissions = await auth.wallpaperSubmissions()
+            loading = false
+        }
+        .sheet(isPresented: $showingSubmission) {
+            SubmitWallpaperView { Task { submissions = await auth.wallpaperSubmissions() } }
+        }
+        .confirmationDialog(
+            "Delete All Cloud Projects",
+            isPresented: $showingDeleteAll,
+            titleVisibility: .visible
+        ) {
+            Button("Delete All", role: .destructive) {
+                Task { _ = await drive.deleteAll() }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will permanently delete the entire CAPlayground folder and all cloud projects from Google Drive. Projects stored on this device will not be affected. This action cannot be undone.")
+        }
     }
 
     private var displayName: String {
@@ -100,27 +117,50 @@ struct DashboardView: View {
                 Text("BETA").font(.caption2).padding(.horizontal, 8).padding(.vertical, 3).foregroundStyle(.blue).background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 5)).overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.blue.opacity(0.2)))
             }
             Text("Sync and manage your projects in the cloud with Google Drive.").font(.subheadline).foregroundStyle(.secondary)
-            if !drive.connected {
-                Button { drive.connect() } label: { Label("Sign in to Google Drive", systemImage: "externaldrive.connected.to.line.below") }.buttonStyle(CAWebButtonStyle(variant: .accent))
-            } else {
+
+            if drive.connected {
                 HStack(spacing: 10) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    VStack(alignment: .leading, spacing: 2) { Text("Signed in to Google Drive").font(.subheadline.weight(.medium)); Text("Your projects can be synced to the cloud").font(.caption).foregroundStyle(.secondary) }
+                    Image(systemName: "externaldrive.connected.to.line.below.fill").foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Signed in to Google Drive").font(.subheadline.weight(.medium))
+                        Text("Your projects can be synced to the cloud").font(.caption).foregroundStyle(.green)
+                    }
                     Spacer()
                 }
-                .padding(12).background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.green.opacity(0.22)))
-                Menu("Upload Local Project") { ForEach(projectStore.projects) { project in Button(project.name) { Task { await drive.upload(project) } } } }.buttonStyle(CAWebButtonStyle(variant: .outline))
-                if drive.files.isEmpty && !drive.isLoading { Text("No cloud projects yet.").font(.caption).foregroundStyle(.secondary) }
-                ForEach(drive.files) { file in
-                    HStack {
-                        VStack(alignment: .leading) { Text(file.name); if let size = file.size { Text("\(size) bytes").font(.caption).foregroundStyle(.secondary) } }
-                        Spacer()
-                        Button("Download") { Task { await drive.download(file, into: projectStore) } }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 32))
-                        Button(role: .destructive) { Task { await drive.delete(file) } } label: { Image(systemName: "trash") }
-                    }.padding(10).background(CATheme.muted(scheme).opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.green.opacity(0.22)))
+
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        NavigationLink("Manage Projects") { ProjectsView() }
+                            .buttonStyle(CAWebButtonStyle(variant: .outline))
+                            .frame(maxWidth: .infinity)
+                        Button("Delete All", role: .destructive) { showingDeleteAll = true }
+                            .buttonStyle(CAWebButtonStyle(variant: .outline))
+                            .foregroundStyle(CATheme.destructive)
+                            .disabled(drive.isLoading)
+                    }
+                    Button {
+                        drive.disconnect()
+                    } label: {
+                        Label("Sign out from Google Drive", systemImage: "cloud")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(CAWebButtonStyle(variant: .outline))
                 }
-                Button { drive.disconnect() } label: { Label("Sign out from Google Drive", systemImage: "cloud") }.buttonStyle(CAWebButtonStyle(variant: .outline))
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    Button { drive.connect() } label: {
+                        Label("Sign in to Google Drive", systemImage: "externaldrive.connected.to.line.below")
+                    }
+                    .buttonStyle(CAWebButtonStyle(variant: .accent))
+                    .disabled(drive.isLoading)
+                    Text("Once signed in, you can sync projects directly from the projects page.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
             }
+
             if drive.isLoading { ProgressView() }
             if let message = drive.message { Text(message).font(.caption).foregroundStyle(.green) }
             if let error = drive.error { Text(error).font(.caption).foregroundStyle(.red) }
@@ -133,8 +173,15 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Account Options").font(.title3.bold())
             Text("Manage your email, username, password, or delete your account.").font(.subheadline).foregroundStyle(.secondary)
-            NavigationLink("Manage Account") { AccountView() }.buttonStyle(CAWebButtonStyle(variant: .outline))
-            Button { Task { await auth.signOut(); dismiss() } } label: { Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") }.buttonStyle(CAWebButtonStyle(variant: .outline))
+            HStack(spacing: 12) {
+                NavigationLink("Manage Account") { AccountView() }
+                    .buttonStyle(CAWebButtonStyle(variant: .accent))
+                Button { Task { await auth.signOut(); dismiss() } } label: {
+                    Text(loading ? "Signing out..." : "Sign Out")
+                }
+                .buttonStyle(CAWebButtonStyle(variant: .outline))
+                .disabled(loading)
+            }
         }
         .padding(24).background(CATheme.card(scheme), in: RoundedRectangle(cornerRadius: 12))
         .overlay { RoundedRectangle(cornerRadius: 12).stroke(CATheme.border(scheme).opacity(0.8), lineWidth: 1) }

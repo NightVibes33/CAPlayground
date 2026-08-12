@@ -9,11 +9,12 @@ async function session(request: NextRequest) {
 }
 function response(body: unknown, sealed?: string, status = 200) { const value = NextResponse.json(body, { status }); if (sealed) value.headers.set("X-Drive-Session", sealed); return value }
 async function driveJSON(url: string, token: string, init: RequestInit = {}) { const result = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.headers || {}) } }); if (!result.ok) throw new Error(await result.text()); return result.status === 204 ? null : result.json() }
+const folderQueryURL = "https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent("name='CAPlayground' and mimeType='application/vnd.google-apps.folder' and trashed=false") + "&fields=files(id,name)&spaces=drive"
 
 export async function GET(request: NextRequest) {
   try {
     const { session: auth, sealed } = await session(request), token = auth.accessToken
-    const folders = await driveJSON("https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent("name='CAPlayground' and mimeType='application/vnd.google-apps.folder' and trashed=false") + "&fields=files(id,name)&spaces=drive", token)
+    const folders = await driveJSON(folderQueryURL, token)
     if (!folders.files?.length) return response({ files: [] }, sealed)
     const q = `'${folders.files[0].id}' in parents and trashed=false and mimeType='application/zip'`
     const files = await driveJSON("https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) + "&fields=files(id,name,webViewLink,createdTime,size)&orderBy=createdTime%20desc&spaces=drive", token)
@@ -30,8 +31,14 @@ export async function POST(request: NextRequest) {
       return response({ zipData: Buffer.from(await result.arrayBuffer()).toString("base64") }, sealed)
     }
     if (body.action === "delete" && body.fileId) { await driveJSON(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(body.fileId)}`, token, { method: "DELETE" }); return response({ success: true }, sealed) }
+    if (body.action === "deleteAll") {
+      const folders = await driveJSON(folderQueryURL, token)
+      const folderId = folders.files?.[0]?.id
+      if (folderId) await driveJSON(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}`, token, { method: "DELETE" })
+      return response({ success: true }, sealed)
+    }
     if (body.action === "upload" && body.name && body.zipData) {
-      const folderQuery = await driveJSON("https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent("name='CAPlayground' and mimeType='application/vnd.google-apps.folder' and trashed=false") + "&fields=files(id)&spaces=drive", token)
+      const folderQuery = await driveJSON(folderQueryURL, token)
       let folderId = folderQuery.files?.[0]?.id
       if (!folderId) { const folder = await driveJSON("https://www.googleapis.com/drive/v3/files", token, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "CAPlayground", mimeType: "application/vnd.google-apps.folder" }) }); folderId = folder.id }
       const fileName = `${body.name}.ca.zip`
