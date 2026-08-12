@@ -128,14 +128,15 @@ private enum VideoFrameExtractor {
 
     private static func extractGIF(url: URL, quality: Double, maxDuration: Double, useWebP: Bool) throws -> Result {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil), CGImageSourceGetCount(source) > 0 else { throw CocoaError(.fileReadCorruptFile) }
-        var frames: [Data] = []; var width = 0; var height = 0; var duration = 0.0
-        for index in 0..<CGImageSourceGetCount(source) {
+        let assumedFPS = 15.0
+        let maxFrames = min(CGImageSourceGetCount(source), Int(floor(maxDuration * assumedFPS)))
+        var frames: [Data] = []; var width = 0; var height = 0
+        for index in 0..<maxFrames {
             guard let image = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
-            let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any], gif = properties?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
-            let delay = gif?[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? gif?[kCGImagePropertyGIFDelayTime] as? Double ?? (1.0 / 15.0)
-            if duration + delay > maxDuration { break }
-            width = image.width; height = image.height; frames.append(try encode(image, quality: quality, webP: useWebP)); duration += delay
+            width = image.width; height = image.height
+            frames.append(try encode(image, quality: quality, webP: useWebP))
         }
+        let duration = frames.isEmpty ? 0 : Double(frames.count) / assumedFPS
         return Result(frames: frames, frameExtension: useWebP ? ".webp" : ".jpg", width: width, height: height, duration: duration)
     }
 

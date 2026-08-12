@@ -138,14 +138,7 @@ struct ProjectsView: View {
             .sheet(isPresented: $importLinkOpen) { importLinkDialog }
             .sheet(isPresented: $deleteOptionsOpen) { deleteOptionsDialog }
             .sheet(isPresented: tosBinding) { tosDialog }
-            .confirmationDialog("Import Project", isPresented: $importDialogOpen, titleVisibility: .visible) {
-                Button("Import .ca / ZIP") { importKind = .ca; importFileOpen = true }
-                Button("Import .tendies") { importKind = .tendies; importFileOpen = true }
-                Button("Import from Link") { importLinkOpen = true }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("Choose the same import source supported by the CAPlayground website.")
-            }
+            .sheet(isPresented: $importDialogOpen) { importTypeDialog }
             .fileImporter(isPresented: $importFileOpen, allowedContentTypes: importContentTypes, allowsMultipleSelection: false) { result in
                 guard case .success(let urls) = result, let url = urls.first else {
                     if case .failure(let error) = result { importError = error.localizedDescription }
@@ -177,7 +170,7 @@ struct ProjectsView: View {
     }
 
     private var importContentTypes: [UTType] {
-        importKind == .tendies ? [.tendies, .zip] : [.caArchive, .zip]
+        importKind == .tendies ? [.tendies] : [.caArchive, .zip]
     }
 
     private var header: some View {
@@ -352,6 +345,43 @@ struct ProjectsView: View {
         }.buttonStyle(.plain)
     }
 
+    private var importTypeDialog: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Choose the type of file you want to import:")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Button {
+                    importDialogOpen = false; importKind = .ca; importFileOpen = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Import .ca file").fontWeight(.medium)
+                        Text("Import a CoreAnimation package or zip file").font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
+                }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 64))
+                Button {
+                    importDialogOpen = false; importKind = .tendies; importFileOpen = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Import .tendies file").fontWeight(.medium)
+                        Text("Import a tendies wallpaper file").font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
+                }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 64))
+                Button {
+                    importDialogOpen = false; importLinkOpen = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Import from link").fontWeight(.medium)
+                        Text("Paste a direct .tendies download URL").font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
+                }.buttonStyle(CAWebButtonStyle(variant: .outline, height: 64))
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .navigationTitle("Import Project").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { importDialogOpen = false } } }
+        }.presentationDetents([.height(360)])
+    }
+
     private var createProjectDialog: some View {
         NavigationStack {
             Form {
@@ -406,23 +436,25 @@ struct ProjectsView: View {
     private var importLinkDialog: some View {
         NavigationStack {
             Form {
-                Section("Wallpaper URL") {
-                    TextField("https://…/wallpaper.tendies", text: $importLinkURL)
-                        .textInputAutocapitalization(.never).keyboardType(.URL)
-                }
-                Section("Optional attribution") {
-                    TextField("Wallpaper name", text: $importLinkName)
-                    TextField("Creator", text: $importLinkCreator)
-                }
-                if importLinkBusy { ProgressView("Downloading and importing…") }
+                Section {
+                    TextField("https://.../wallpapers/your.tendies", text: $importLinkURL)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                } header: { Text(".tendies URL") }
+                Section {
+                    TextField("Imported Wallpaper", text: $importLinkName)
+                } header: { Text("Name") }
+                Section {
+                    TextField("Unknown", text: $importLinkCreator)
+                } header: { Text("Creator") }
+                if importLinkBusy { ProgressView() }
             }
             .navigationTitle("Import from Link")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { importLinkOpen = false } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { importLinkOpen = false }.disabled(importLinkBusy) }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Import") { Task { await importFromLink() } }
-                        .disabled(importLinkBusy || URL(string: importLinkURL.trimmingCharacters(in: .whitespacesAndNewlines)) == nil)
+                        .disabled(importLinkBusy || importLinkURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }.presentationDetents([.medium])
@@ -503,11 +535,6 @@ struct ProjectsView: View {
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         do {
             let data = try Data(contentsOf: url)
-            if importKind == .ca, let project = try? JSONDecoder().decode(CAProjectDocument.self, from: data) {
-                store.update(project)
-                path.append(project.id)
-                return
-            }
             let suggested = url.deletingPathExtension().lastPathComponent
             let project = try CAArchiveImporter.importProject(data: data, suggestedName: suggested)
             store.update(project)
@@ -527,9 +554,9 @@ struct ProjectsView: View {
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw URLError(.badServerResponse) }
             let suggested = importLinkName.trimmingCharacters(in: .whitespacesAndNewlines)
             var project = try CAArchiveImporter.importProject(data: data, suggestedName: suggested.isEmpty ? "Imported Wallpaper" : suggested)
-            if !importLinkCreator.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                project.documents[project.activeCA]?.camlHeaderComments = "Original wallpaper: \(project.name)\nCreated by: \(importLinkCreator.trimmingCharacters(in: .whitespacesAndNewlines))\nImported from URL"
-            }
+            let originalName = importLinkName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Imported Wallpaper" : importLinkName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let creator = importLinkCreator.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Unknown" : importLinkCreator.trimmingCharacters(in: .whitespacesAndNewlines)
+            project.documents[project.activeCA]?.camlHeaderComments = "Original wallpaper: \(originalName)\nCreated by: \(creator)\nImported from URL"
             store.update(project)
             importLinkOpen = false
             importLinkURL = ""

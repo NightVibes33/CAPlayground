@@ -452,14 +452,16 @@ struct EditorView: View {
     }
 
     private var mobileAdd: some View {
-        AddLayerMenu(project: $project, selectedID: $selectedID)
+        AddLayerMenu(project: $project, selectedID: $selectedID, mobileMode: true)
             .frame(width: 40, height: 40).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
     }
 
     private var mobileStates: some View {
         Menu {
             Button("Base State") { project.activeState = "Base State" }
-            ForEach(project.states, id: \.self) { state in Button(state) { project.activeState = state } }
+            ForEach(["Locked", "Unlock", "Sleep"].filter { project.states.contains($0) }, id: \.self) { state in
+                Button(state) { project.activeState = state }
+            }
         } label: { Image(systemName: "circle.circle").frame(width: 40, height: 40) }
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
         .accessibilityLabel("States")
@@ -707,11 +709,11 @@ private struct EditorSettingsPanel: View {
         VStack(spacing: 7) {
             shortcut("Undo", "⌘ + Z"); shortcut("Redo", "⌘ + Shift + Z")
             shortcut("Zoom In", "⌘ + +"); shortcut("Zoom Out", "⌘ + -"); shortcut("Reset Zoom", "⌘ + 0")
-            shortcut("Export", "⌘ + E"); shortcut("Pan", "Shift + Drag or two-finger drag")
+            shortcut("Export", "⌘ + E"); shortcut("Pan", "Shift + Drag or Middle Click")
             shortcut("Toggle Left Panel", "⌘ + Shift + L"); shortcut("Toggle Right Panel", "⌘ + Shift + I")
             shortcut("Bring Forward", "⌘ + ]"); shortcut("Send Backward", "⌘ + [")
             shortcut("Bring to Front", "⌘ + Shift + ]"); shortcut("Send to Back", "⌘ + Shift + [")
-            shortcut("Delete Layer", "Delete"); shortcut("Resize from Center", "Option + Drag Handle"); shortcut("Maintain Aspect Ratio", "Shift + Drag Handle")
+            shortcut("Delete Layer", "Delete"); shortcut("Resize from Center", "Alt + Drag Handle"); shortcut("Maintain Aspect Ratio", "Shift + Drag Handle")
         }
     }
 

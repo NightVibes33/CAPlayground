@@ -199,9 +199,10 @@ struct LayerPanel: View {
     }
 }
 
-struct AddLayerMenu: View {
+struct AdLayerMenu: View {
     @Binding var project: CAProjectDocument
     @Binding var selectedID: UUID?
+    var mobileMode = false
     @State private var imageImporterOpen = false
     @State private var videoLayerOpen = false
     @State private var uploadStatus: String?
@@ -212,9 +213,10 @@ struct AddLayerMenu: View {
             Menu {
                 Button("Text Layer") { add(.text) }; Button("Basic Layer") { add(.shape) }; Button("Gradient Layer") { add(.gradient) }
                 Button("Image Layer…") { imageImporterOpen = true }; Button("Video Layer…") { videoLayerOpen = true }
-                Button("Emitter Layer") { add(.emitter) }; Button("Replicator Layer") { add(.replicator) }
+                Button("Emitter Layer") { add(.emitter) }
+                if !mobileMode { Button("Replicator Layer") { add(.replicator) } }
                 if project.gyroEnabled { Button("Transform Layer") { add(.transform) } }
-                Button("Liquid Glass Layer") { add(.liquidGlass) }
+                if !mobileMode { Button("Liquid Glass Layer") { add(.liquidGlass) } }
             } label: { Label("Add Layer", systemImage: "plus") }
             .accessibilityLabel("Add Layer")
         }
