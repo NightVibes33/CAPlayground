@@ -44,6 +44,7 @@ struct LayerPanel: View {
                 }
             }
         }
+        }
         .caPanel()
         .sheet(isPresented: $renameOpen) {
             NavigationStack {
