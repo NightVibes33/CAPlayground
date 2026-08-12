@@ -12,15 +12,18 @@ final class CoreAnimationRenderer {
         host.sublayers?.forEach { $0.removeFromSuperlayer() }
         renderedLayers.removeAll(keepingCapacity: true)
         selectableIDs.removeAll(keepingCapacity: true)
-        assets = project.assets
         host.backgroundColor = UIColor(caHex: project.background ?? "#F3F4F6")?.cgColor
+
         if showBackground, project.activeCA == .floating, let background = project.documents[.background] {
+            assets = project.assets(for: .background)
             let backgroundRoot = makeLayer(from: background.root, selectable: false)
             backgroundRoot.bounds = CGRect(x: 0, y: 0, width: CGFloat(project.width), height: CGFloat(project.height))
             backgroundRoot.position = CGPoint(x: CGFloat(project.width / 2), y: CGFloat(project.height / 2))
             host.addSublayer(backgroundRoot)
             apply(state: project.activeState, document: background)
         }
+
+        assets = project.assets(for: project.activeCA)
         let root = makeLayer(from: project.root)
         root.bounds = CGRect(x: 0, y: 0, width: CGFloat(project.width), height: CGFloat(project.height))
         root.position = CGPoint(x: CGFloat(project.width / 2), y: CGFloat(project.height / 2))
