@@ -43,7 +43,7 @@ This file is an engineering checklist for the native conversion. A surface is on
 - [ ] Replicator inspector
 - [ ] Filters inspector
 - [ ] Compositing inspector
-- [ ] Animations inspector/keyframes/bulk input/export
+- [ ] Animations inspector/keyframes/bulk input/export — website control set implemented; awaiting full iOS CI verification.
 - [ ] Gyro inspector
 - [ ] Blur editor
 - [ ] Export dialog and success actions
@@ -74,3 +74,4 @@ This file is an engineering checklist for the native conversion. A surface is on
 - `.ca` and `.tendies` UTTypes/document types registered for native opening.
 - Opening documents in place enabled.
 - Full Layers panel restored from the last green implementation before applying mobile-only deltas.
+- Animation inspector now mirrors website-supported key paths, duplicate filtering, gradient-only `colors`, empty new animations, current-value keyframes, custom key times, duration/loop/repeat/advanced controls, typed value editors, Bulk text plus `.txt/.csv` import, value export, and removal; CI verification pending.
