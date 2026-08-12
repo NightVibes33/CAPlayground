@@ -1,10 +1,8 @@
 import SwiftUI
 
 struct HomeView: View {
-    @Environment(AuthStore.self) private var auth
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @AppStorage("appearance") private var appearance = "system"
 
     private let layers: [(LayerKind, String)] = [
         (.basic, "A fundamental solid color or shape layer (CALayer) for backgrounds or simple elements."),
@@ -29,66 +27,10 @@ struct HomeView: View {
                     }
                 }
                 .background(CATheme.background(scheme).ignoresSafeArea())
-                navigation.padding(.horizontal, horizontalSizeClass == .compact ? 16 : 24).padding(.top, 8)
+                CAWebsiteNavigation().padding(.horizontal, horizontalSizeClass == .compact ? 16 : 24).padding(.top, 8)
             }
             .toolbar(.hidden, for: .navigationBar)
         }
-    }
-
-    private var navigation: some View {
-        HStack(spacing: 12) {
-            Image(scheme == .dark ? "icon-dark" : "icon-light")
-                .resizable().frame(width: 32, height: 32).clipShape(RoundedRectangle(cornerRadius: 8))
-            Text("CAPlayground").font(.custom("Helvetica Neue", size: 20).weight(.bold))
-            Spacer()
-            if horizontalSizeClass == .compact {
-                Menu {
-                    Link("Docs", destination: URL(string: "https://docs.enkei64.xyz")!)
-                    NavigationLink("Contributors") { ContributorsView() }
-                    NavigationLink("Roadmap") { RoadmapView() }
-                    NavigationLink("Wallpapers") { WallpapersView() }
-                    NavigationLink("Tendies Checker") { TendiesCheckerView() }
-                    NavigationLink("Privacy Policy") { PrivacyPolicyView() }
-                    NavigationLink("Terms of Service") { TermsOfServiceView() }
-                    if auth.isSignedIn {
-                        NavigationLink("Account") { AccountView() }
-                    } else {
-                        NavigationLink("Sign In") { SignInView() }
-                    }
-                    NavigationLink("Projects") { ProjectsView() }
-                    Button(appearance == "dark" ? "Light Mode" : "Dark Mode", systemImage: appearance == "dark" ? "sun.max" : "moon") { toggleTheme() }
-                } label: { Image(systemName: "line.3.horizontal").frame(width: 40, height: 40) }
-            } else {
-                HStack(spacing: 24) {
-                    Link("Docs", destination: URL(string: "https://docs.enkei64.xyz")!)
-                    NavigationLink("Contributors") { ContributorsView() }
-                    NavigationLink("Roadmap") { RoadmapView() }
-                    NavigationLink("Wallpapers") { WallpapersView() }
-                }.font(.subheadline).foregroundStyle(.primary)
-                if auth.isSignedIn {
-                    Menu {
-                        NavigationLink("Dashboard") { DashboardView() }
-                        Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { Task { await auth.signOut() } }
-                    } label: { Image(systemName: "person").frame(width: 36, height: 36) }
-                } else {
-                NavigationLink("Sign In") { SignInView() }.buttonStyle(CAWebButtonStyle(variant: .outline))
-                }
-                NavigationLink(destination: ProjectsView()) {
-                    Label("Projects", systemImage: "arrow.right").labelStyle(.titleAndIcon)
-                }.buttonStyle(CAWebButtonStyle(variant: .accent))
-                Button { toggleTheme() } label: { Image(systemName: appearance == "dark" ? "sun.max" : "moon").frame(width: 36, height: 36) }
-                    .buttonStyle(.plain).accessibilityLabel("Toggle theme")
-            }
-        }
-        .padding(.horizontal, 20).frame(height: 56)
-        .background(CATheme.background(scheme).opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 16).stroke(CATheme.border(scheme), lineWidth: 1) }
-        .shadow(color: .black.opacity(0.10), radius: 10, y: 4)
-    }
-
-    private func toggleTheme() {
-        appearance = scheme == .dark ? "light" : "dark"
     }
 
     private var hero: some View {
