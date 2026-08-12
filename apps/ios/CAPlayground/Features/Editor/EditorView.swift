@@ -291,28 +291,13 @@ struct EditorView: View {
     }
 
     private var timelinePanel: some View {
-        VStack(spacing: 4) {
-            HStack {
-                Text("Timeline").font(.caption.bold())
-                Spacer()
-                Button { timelineViewSeconds = min(600, timelineViewSeconds * 2) } label: { Image(systemName: "minus").frame(width: 24, height: 24) }.disabled(timelineViewSeconds >= 600)
-                Text("Scale").font(.caption2)
-                Button { timelineViewSeconds = max(1, timelineViewSeconds / 2) } label: { Image(systemName: "plus").frame(width: 24, height: 24) }.disabled(timelineViewSeconds <= 1)
-            }
-            Slider(value: $timelineTime, in: 0...600, step: 0.01)
-            ScrollView(.vertical) {
-                VStack(spacing: 2) {
-                    ForEach(animatedLayerRows, id: \.layer.id) { row in
-                        timelineLayerRow(row.layer, depth: row.depth)
-                    }
-                }
-            }
-            .frame(maxHeight: 160)
-        }
-        .padding(8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
-    }
+    WebsiteTimelinePanel(
+        project: $project,
+        selectedID: $selectedID,
+        currentTime: $timelineTime,
+        viewSeconds: $timelineViewSeconds
+    )
+}
 
     private var animatedLayerRows: [(layer: LayerModel, depth: Int)] {
         func walk(_ layer: LayerModel, depth: Int) -> [(LayerModel, Int)] {
