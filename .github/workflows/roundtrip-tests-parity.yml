@@ -1,0 +1,24 @@
+name: Add Video Gyro round-trip parity tests
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/roundtrip-tests-parity.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Apply round-trip tests and legacy compatibility
+        run: python3 .github/roundtrip_tests_patch.py
+      - name: Commit round-trip tests
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add Video and Gyro round-trip parity tests'
+          git push origin HEAD:agent/native-ios-conversion
