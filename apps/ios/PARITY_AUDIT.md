@@ -38,13 +38,13 @@ This file is an engineering checklist for the native conversion. A surface is on
 - [ ] Text inspector — website state restrictions, center fallback, four alignment controls, and wrap helper copy implemented; Simulator CI passed on run #147, final stacked device archive pending.
 - [ ] Gradient inspector — website type, 0–100% endpoint slider/input controls, color opacity display, add/remove controls implemented; Simulator CI passed on run #147, final stacked device archive pending.
 - [ ] Image inspector
-- [ ] Video inspector — read-only Frames/FPS/Duration, sync-aware Calculation/Auto Reverse controls, frame child generation, Locked/Unlock/Sleep Beginning/End defaults, and z-position state overrides implemented; CI pending.
+- [ ] Video inspector — read-only Frames/FPS/Duration, sync-aware Calculation/Auto Reverse controls, frame child generation, Locked/Unlock/Sleep Beginning/End defaults, and z-position state overrides implemented; Simulator CI passed on run #151, final stacked device archive pending.
 - [ ] Emitter inspector
 - [ ] Replicator inspector
 - [ ] Filters inspector
 - [ ] Compositing inspector — website percentage opacity input, Content cross-link, corner radius and Base-State-only clip behavior implemented; Simulator CI passed on run #147, final stacked device archive pending.
 - [x] Animations inspector/keyframes/bulk input/export — website control set implemented and verified by normal iOS CI run #110.
-- [ ] Gyro inspector
+- [ ] Gyro inspector — website dictionary count/add/remove/title/axis/fixed-key-path/map controls plus root wallpaper style/parallax/property-group import/export implemented; CI pending.
 - [ ] Blur editor
 - [ ] Export dialog and success actions
 - [ ] Video/GIF conversion
@@ -84,3 +84,4 @@ This file is an engineering checklist for the native conversion. A surface is on
 - Geometry inspector mirrors the website's conditional animation locks, Canvas/Parent alignment controls, optional percentage resize controls, 0–400% scale control, X/Y/Z rotation controls, 3×3/custom anchor controls, state-transition restrictions, and perspective control.
 - Compositing, Content, Text, and Gradient now use the website's controls/defaults and state-transition restrictions instead of native-only shortcuts.
 - Video state-sync now generates native image frame children and z-position overrides equivalent to the website, while preserving stable UUID targets through CAML import/export.
+- Gyro wallpaper export now emits root-level `wallpaperBackgroundAssetNames`, `wallpaperFloatingAssetNames`, `wallpaperParallaxGroups`, and `wallpaperPropertyGroups`; import restores property-group overrides and redistributes parallax dictionaries to their target layers by `layerName`.
