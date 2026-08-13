@@ -10,7 +10,7 @@ enum CAMLSerializer {
         let wallpaper = kind == .wallpaper
         let dictionaries = wallpaper ? document.root.flattened().flatMap { $0.gyroDictionaries ?? [] } : []
         let rootStyle = wallpaper ? wallpaperStyle(root: document.root, dictionaries: dictionaries, stateOverrides: document.stateOverrides, indent: 2) : nil
-        let serializedRoot = wallpaper ? layer(document.root, indent: 1, rootStyle: rootStyle) : wrapper(root: document.root)
+        let serializedRoot = wallpaper ? layer(document.root, indent: 1, rootStyle: rootStyle, includeLayerGyroStyle: false) : wrapper(root: document.root)
         let stateXML = wallpaper ? "" : states(document)
         let comments = document.camlHeaderComments.map { "\n<!-- \(escapeComment($0)) -->" } ?? ""
         return header + comments + "\n<caml xmlns=\"http://www.apple.com/CoreAnimation/1.0\">\n\(serializedRoot)\(stateXML)\n</caml>"
@@ -24,7 +24,7 @@ enum CAMLSerializer {
         return layer(wrapper, indent: 1)
     }
 
-    private static func layer(_ model: LayerModel, indent: Int, rootStyle: String? = nil) -> String {
+    private static func layer(_ model: LayerModel, indent: Int, rootStyle: String? = nil, includeLayerGyroStyle: Bool = true) -> String {
         let tag: String = switch model.kind {
         case .gradient: "CAGradientLayer"
         case .emitter: "CAEmitterLayer"
@@ -167,8 +167,9 @@ enum CAMLSerializer {
         }
         if model.kind == .liquidGlass { children += liquidGlass(model, indent: indent + 1) }
         if !model.animations.isEmpty { children += animations(model.animations, indent: indent + 1) }
+        if includeLayerGyroStyle, let gyro = model.gyroDictionaries, !gyro.isEmpty { children += legacyLayerGyroStyle(gyro, indent: indent + 1) }
         if let rootStyle { children += rootStyle }
-        if !model.children.isEmpty { children += "\n\(pad)  <sublayers>" + model.children.map { "\n" + layer($0, indent: indent + 2) }.joined() + "\n\(pad)  </sublayers>" }
+        if !model.children.isEmpty { children += "\n\(pad)  <sublayers>" + model.children.map { "\n" + layer($0, indent: indent + 2, includeLayerGyroStyle: includeLayerGyroStyle) }.joined() + "\n\(pad)  </sublayers>" }
         if model.kind == .emitter, let cells = model.emitterCells, !cells.isEmpty { children += emitterCells(cells, indent: indent + 1) }
 
         return children.isEmpty ? "\(pad)<\(tag)\(attrs)/>" : "\(pad)<\(tag)\(attrs)>\(children)\n\(pad)</\(tag)>"
@@ -272,6 +273,23 @@ enum CAMLSerializer {
             return children.isEmpty ? "\n\(pad)  <CAEmitterCell\(attrString)/>" : "\n\(pad)  <CAEmitterCell\(attrString)>\(children)</CAEmitterCell>"
         }.joined()
         return "\n\(pad)<emitterCells>\(items)\n\(pad)</emitterCells>"
+    }
+
+    private static func legacyLayerGyroStyle(_ dictionaries: [GyroDictionaryModel], indent: Int) -> String {
+        let pad = String(repeating: "  ", count: indent)
+        let items = dictionaries.map { item in
+            "\n\(pad)    <NSDictionary>" +
+            "<axis type=\"string\" value=\"\(escape(item.axis))\"/>" +
+            "<image type=\"string\" value=\"null\"/>" +
+            "<keyPath type=\"string\" value=\"\(escape(item.keyPath))\"/>" +
+            "<layerName type=\"string\" value=\"\(escape(item.layerName))\"/>" +
+            "<mapMaxTo type=\"real\" value=\"\(number(item.mapMaxTo))\"/>" +
+            "<mapMinTo type=\"real\" value=\"\(number(item.mapMinTo))\"/>" +
+            "<title type=\"string\" value=\"\(escape(item.title))\"/>" +
+            "<view type=\"string\" value=\"\(escape(item.view))\"/>" +
+            "</NSDictionary>"
+        }.joined()
+        return "\n\(pad)<style>\n\(pad)  <wallpaperParallaxGroups type=\"NSArray\">\(items)\n\(pad)  </wallpaperParallaxGroups>\n\(pad)</style>"
     }
 
     private static func wallpaperStyle(
