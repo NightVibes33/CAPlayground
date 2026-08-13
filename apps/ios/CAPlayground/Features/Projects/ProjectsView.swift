@@ -51,6 +51,8 @@ struct ProjectsView: View {
     @State private var importError: String?
     @State private var pendingDelete: Entry?
     @State private var deleteOptionsOpen = false
+    @State private var bulkDeleteOpen = false
+    @State private var pendingBulkDeleteIDs: Set<String> = []
     @State private var deleteFromDevice = true
     @State private var deleteFromCloud = false
     @State private var pendingRename: CAProjectDocument?
@@ -137,6 +139,7 @@ struct ProjectsView: View {
             .sheet(item: $pendingRename) { project in renameProjectDialog(project) }
             .sheet(isPresented: $importLinkOpen) { importLinkDialog }
             .sheet(isPresented: $deleteOptionsOpen) { deleteOptionsDialog }
+            .sheet(isPresented: $bulkDeleteOpen) { bulkDeleteOptionsDialog }
             .sheet(isPresented: tosBinding) { tosDialog }
             .sheet(isPresented: $importDialogOpen) { importTypeDialog }
             .fileImporter(isPresented: $importFileOpen, allowedContentTypes: importContentTypes, allowsMultipleSelection: false) { result in
@@ -482,6 +485,43 @@ struct ProjectsView: View {
         }.presentationDetents([.height(300)])
     }
 
+    private var bulkDeleteOptionsDialog: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle("Delete from Device", isOn: $deleteFromDevice)
+                    Toggle("Delete from Cloud", isOn: $deleteFromCloud)
+                } footer: {
+                    Text("Choose where the selected projects should be deleted. This action cannot be undone.")
+                }
+                if !deleteFromDevice && !deleteFromCloud {
+                    Section {
+                        Text("Please select at least one location.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+            .navigationTitle("Delete \(pendingBulkDeleteIDs.count) Selected Projects")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        bulkDeleteOpen = false
+                        pendingBulkDeleteIDs.removeAll()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Delete", role: .destructive) {
+                        Task { await performBulkDelete() }
+                    }
+                    .disabled(!deleteFromDevice && !deleteFromCloud)
+                }
+            }
+        }
+        .presentationDetents([.height(320)])
+    }
+
     private var tosDialog: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 18) {
@@ -587,13 +627,31 @@ struct ProjectsView: View {
     }
 
     private func bulkDelete() {
-        let selected = selectedEntries
-        for entry in selected where entry.local != nil && entry.cloud == nil {
-            if let local = entry.local { store.delete(local) }
+        guard !selectedIDs.isEmpty else { return }
+        pendingBulkDeleteIDs = selectedIDs
+        deleteFromDevice = true
+        deleteFromCloud = false
+        bulkDeleteOpen = true
+    }
+
+    private func performBulkDelete() async {
+        guard !pendingBulkDeleteIDs.isEmpty, deleteFromDevice || deleteFromCloud else { return }
+        let entries = mergedEntries.filter { pendingBulkDeleteIDs.contains($0.id) }
+        if deleteFromDevice {
+            for entry in entries {
+                if let local = entry.local { store.delete(local) }
+            }
         }
-        let complex = selected.first { $0.cloud != nil }
+        if deleteFromCloud {
+            for entry in entries {
+                if let cloud = entry.cloud { await drive.delete(cloud) }
+            }
+            if drive.connected { await drive.refresh() }
+        }
         selectedIDs.removeAll()
-        if let complex { confirmDelete(complex) }
+        pendingBulkDeleteIDs.removeAll()
+        selectMode = false
+        bulkDeleteOpen = false
     }
 
     private func beginSyncSelected() { beginSync(selectedEntries) }
