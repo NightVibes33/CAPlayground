@@ -285,8 +285,7 @@ enum CAMLSerializer {
             let maxType = item.mapMaxTo.rounded() == item.mapMaxTo ? "integer" : "real"
             let minType = item.mapMinTo.rounded() == item.mapMinTo ? "integer" : "real"
             let view = wallpaperView(layerName: item.layerName, root: root)
-            return "
-\(pad)    <NSDictionary>" +
+            return "\n\(pad)    <NSDictionary>" +
                 "<axis type=\"string\" value=\"\(escape(item.axis))\"/>" +
                 "<image type=\"string\" value=\"null\"/>" +
                 "<keyPath type=\"string\" value=\"\(escape(item.keyPath))\"/>" +
@@ -309,8 +308,7 @@ enum CAMLSerializer {
             let homeOut = rotation ? homeValue * .pi / 180 : homeValue
             let sleepOut = rotation ? sleepValue * .pi / 180 : sleepValue
             let view = wallpaperView(targetID: lockedOverride.targetID, root: root)
-            return "
-\(pad)    <NSDictionary>" +
+            return "\n\(pad)    <NSDictionary>" +
                 "<image type=\"null\"/>" +
                 "<keyPath type=\"string\" value=\"\(escape(lockedOverride.keyPath))\"/>" +
                 "<layerName type=\"string\" value=\"\(escape(target.name))\"/>" +
@@ -321,20 +319,12 @@ enum CAMLSerializer {
                 "</NSDictionary>"
         }.joined()
 
-        return "
-\(pad)<style>" +
-            "
-\(pad)  <wallpaperBackgroundAssetNames type=\"NSArray\"/>" +
-            "
-\(pad)  <wallpaperFloatingAssetNames type=\"NSArray\"/>" +
-            "
-\(pad)  <wallpaperParallaxGroups type=\"NSArray\">\(parallax)
-\(pad)  </wallpaperParallaxGroups>" +
-            "
-\(pad)  <wallpaperPropertyGroups type=\"NSArray\">\(properties)
-\(pad)  </wallpaperPropertyGroups>" +
-            "
-\(pad)</style>"
+        return "\n\(pad)<style>" +
+            "\n\(pad)  <wallpaperBackgroundAssetNames type=\"NSArray\"/>" +
+            "\n\(pad)  <wallpaperFloatingAssetNames type=\"NSArray\"/>" +
+            "\n\(pad)  <wallpaperParallaxGroups type=\"NSArray\">\(parallax)\n\(pad)  </wallpaperParallaxGroups>" +
+            "\n\(pad)  <wallpaperPropertyGroups type=\"NSArray\">\(properties)\n\(pad)  </wallpaperPropertyGroups>" +
+            "\n\(pad)</style>"
     }
 
     private static func stateNumber(_ overrides: [StateOverride]?, targetID: UUID, keyPath: String) -> Double? {
