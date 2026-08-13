@@ -1,0 +1,24 @@
+name: Fix serializer string escaping
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/fix-serializer-strings.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Repair serializer strings by source slicing
+        run: python3 .github/fix_serializer_strings.py
+      - name: Commit serializer repair
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Repair CAML serializer string literals'
+          git push origin HEAD:agent/native-ios-conversion
