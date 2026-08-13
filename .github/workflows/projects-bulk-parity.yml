@@ -1,0 +1,24 @@
+name: Apply Projects bulk delete parity
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/projects-bulk-parity.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Apply Projects bulk delete parity
+        run: python3 .github/projects_bulk_patch.py
+      - name: Commit Projects parity
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Match Projects bulk delete to website'
+          git push origin HEAD:agent/native-ios-conversion
