@@ -64,6 +64,7 @@ jobs:
       SCHEME: CAPlayground
       ARCHIVE_PATH: ${{ github.workspace }}/build/CAPlayground.xcarchive
       OUTPUT_DIRECTORY: ${{ github.workspace }}/build/output
+      TEST_DERIVED_DATA: ${{ github.workspace }}/build/TestDerivedData
 
     steps:
       - name: Checkout
@@ -84,13 +85,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf "$TEST_DERIVED_DATA"
           xcodebuild \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$TEST_DERIVED_DATA" \
             CODE_SIGNING_ALLOWED=NO \
             build-for-testing
+
+      - name: Run native tests on iOS Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIMULATOR_UDID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; data=json.load(sys.stdin); devices=[d for runtime in data.get("devices",{}).values() for d in runtime if d.get("isAvailable") and d.get("name","").startswith("iPhone")]; print(devices[-1]["udid"] if devices else "")')"
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "No available iPhone Simulator found"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Running native tests on simulator $SIMULATOR_UDID"
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$TEST_DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building
 
       - name: Archive unsigned iPhoneOS application
         shell: bash
