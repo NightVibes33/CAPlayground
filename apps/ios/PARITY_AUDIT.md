@@ -33,16 +33,16 @@ This file is an engineering checklist for the native conversion. A surface is on
 - [ ] Device preview/clock/lock screen — website state machine/timings, Light/Dark split, depth effect, status/home chrome, gestures, and sleep timeline behavior implemented; full stacked iOS CI verification pending.
 - [ ] Gyro controls
 - [ ] Timeline ruler/playhead/tree/zoom/repeat/autoreverse/resize/snapping — website component and hardware Shift 0.5s resize snapping implemented; full stacked iOS CI verification pending.
-- [ ] Geometry inspector — website animation locks, align target/actions, percentage resize controls, scale control, X/Y/Z rotation controls, anchor-point modes, state restrictions, and perspective behavior implemented; full stacked iOS CI verification pending.
-- [ ] Content inspector
-- [ ] Text inspector
-- [ ] Gradient inspector
+- [ ] Geometry inspector — website animation locks, align target/actions, percentage resize controls, scale control, X/Y/Z rotation controls, anchor-point modes, state restrictions, and perspective behavior implemented; Simulator CI passed on run #141, final stacked device archive pending.
+- [ ] Content inspector — website gradient exclusion, state-aware background color, Base-State-only background opacity/border controls, percentage input, and cross-link behavior implemented; CI pending.
+- [ ] Text inspector — website state restrictions, center fallback, four alignment controls, and wrap helper copy implemented; CI pending.
+- [ ] Gradient inspector — website type, 0–100% endpoint slider/input controls, color opacity display, add/remove controls implemented; CI pending.
 - [ ] Image inspector
 - [ ] Video inspector
 - [ ] Emitter inspector
 - [ ] Replicator inspector
 - [ ] Filters inspector
-- [ ] Compositing inspector
+- [ ] Compositing inspector — website percentage opacity input, Content cross-link, corner radius and Base-State-only clip behavior implemented; CI pending.
 - [x] Animations inspector/keyframes/bulk input/export — website control set implemented and verified by normal iOS CI run #110.
 - [ ] Gyro inspector
 - [ ] Blur editor
@@ -82,3 +82,4 @@ This file is an engineering checklist for the native conversion. A surface is on
 - Timeline mirrors website ruler/tree/playhead/zoom/label-resize/repeat/autoreverse/speed-aware bars/duration-resize behavior and hardware Shift 0.5s snapping.
 - Device Preview mirrors website Locked/Unlock/Sleep interactions, 50% swipe threshold, 200/300/500 ms transition timings, side-button/tap wake behavior, Light/Dark appearance split, clock depth ordering, live clock/date/status chrome, unlocked dock, and sleep timeline pause.
 - Geometry inspector mirrors the website's conditional animation locks, Canvas/Parent alignment controls, optional percentage resize controls, 0–400% scale control, X/Y/Z rotation controls, 3×3/custom anchor controls, state-transition restrictions, and perspective control.
+- Compositing, Content, Text, and Gradient now use the website's controls/defaults and state-transition restrictions instead of native-only shortcuts.
