@@ -103,6 +103,8 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
     private var currentEmitterCell: EmitterCellModel?
     private var currentFilterIndex: Int?
     private var currentGyroDictionary: [String: String]?
+    private var currentWallpaperPropertyDictionary: [String: String]?
+    private var wallpaperPropertyDictionaries: [[String: String]] = []
     private var headerComments: [String] = []
 
     static func parse(_ data: Data) -> AnimationDocument? {
@@ -111,6 +113,7 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         parser.delegate = delegate
         guard parser.parse(), var root = delegate.result else { return nil }
         if root.name == "CAPlayground Root Layer", root.children.count == 1 { root = root.children[0] }
+        delegate.applyWallpaperStyle(to: &root)
         return AnimationDocument(
             root: root,
             states: delegate.states.isEmpty ? ["Locked", "Unlock", "Sleep"] : delegate.states,
@@ -144,6 +147,7 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         if beginTransition(elementName, attributes) { return }
         if beginAnimation(elementName, parent, attributes) { return }
         if beginEmitterCell(elementName, parent, attributes) { return }
+        if beginWallpaperProperty(elementName, parent, attributes) { return }
         if beginGyro(elementName, parent, attributes) { return }
         if beginFilter(elementName, parent, attributes) { return }
         if let layerKind = kind(elementName, attributes) {
@@ -246,6 +250,7 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         if endTransition(elementName) { return }
         if endAnimation(elementName) { return }
         if endEmitterCell(elementName) { return }
+        if endWallpaperProperty(elementName) { return }
         if endGyro(elementName) { return }
         if elementName == "CAFilter" || elementName == "CIFilter" { currentFilterIndex = nil; return }
         if elementName == "keyTimes" || elementName == "values" {
@@ -570,6 +575,70 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         return true
     }
 
+    private func beginWallpaperProperty(_ elementName: String, _ parent: String?, _ attributes: [String: String]) -> Bool {
+        if elementName == "NSDictionary", parent == "wallpaperPropertyGroups" {
+            currentWallpaperPropertyDictionary = [:]
+            return true
+        }
+        guard currentWallpaperPropertyDictionary != nil,
+              ["image", "keyPath", "layerName", "v_home", "v_lock", "v_sleep", "view"].contains(elementName) else { return false }
+        currentWallpaperPropertyDictionary?[elementName] = attributes["value"] ?? ""
+        return true
+    }
+
+    private func endWallpaperProperty(_ elementName: String) -> Bool {
+        guard elementName == "NSDictionary", let dictionary = currentWallpaperPropertyDictionary else { return false }
+        wallpaperPropertyDictionaries.append(dictionary)
+        currentWallpaperPropertyDictionary = nil
+        return true
+    }
+
+    private func applyWallpaperStyle(to root: inout LayerModel) {
+        let rootDictionaries = root.gyroDictionaries ?? []
+        if !rootDictionaries.isEmpty {
+            root.gyroDictionaries = nil
+            for dictionary in rootDictionaries {
+                if let id = layerID(named: dictionary.layerName, in: root) {
+                    root.update(id: id) { layer in
+                        var values = layer.gyroDictionaries ?? []
+                        values.append(dictionary)
+                        layer.gyroDictionaries = values
+                    }
+                } else {
+                    var values = root.gyroDictionaries ?? []
+                    values.append(dictionary)
+                    root.gyroDictionaries = values
+                }
+            }
+        }
+
+        for dictionary in wallpaperPropertyDictionaries {
+            guard let layerName = dictionary["layerName"],
+                  let targetID = layerID(named: layerName, in: root),
+                  let keyPath = dictionary["keyPath"] else { continue }
+            let rotation = ["transform.rotation.z", "transform.rotation.x", "transform.rotation.y"].contains(keyPath)
+            for (state, key) in [("Locked", "v_lock"), ("Unlock", "v_home"), ("Sleep", "v_sleep")] {
+                guard let raw = dictionary[key], var number = Double(raw) else { continue }
+                if rotation { number *= 180 / .pi }
+                var values = stateOverrides[state] ?? []
+                if let index = values.firstIndex(where: { $0.targetID == targetID && $0.keyPath == keyPath }) {
+                    values[index].value = .number(number)
+                } else {
+                    values.append(.init(targetID: targetID, keyPath: keyPath, value: .number(number)))
+                }
+                stateOverrides[state] = values
+            }
+        }
+    }
+
+    private func layerID(named name: String, in layer: LayerModel) -> UUID? {
+        if layer.name == name { return layer.id }
+        for child in layer.children {
+            if let id = layerID(named: name, in: child) { return id }
+        }
+        return nil
+    }
+
     private func beginGyro(_ elementName: String, _ parent: String?, _ attributes: [String: String]) -> Bool {
         if elementName == "NSDictionary", parent == "wallpaperParallaxGroups" {
             currentGyroDictionary = [:]
@@ -592,7 +661,7 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
             layerName: layerName,
             mapMinTo: Double(dictionary["mapMinTo"] ?? "") ?? -50,
             mapMaxTo: Double(dictionary["mapMaxTo"] ?? "") ?? 50,
-            title: dictionary["title"] ?? "Tilt Effect",
+            title: dictionary["title"] ?? "New Gyro Effect",
             view: dictionary["view"] ?? "Wallpaper"
         ))
         layerStack[layerStack.count - 1].layer.gyroDictionaries = values

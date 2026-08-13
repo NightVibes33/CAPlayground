@@ -761,14 +761,95 @@ struct InspectorView: View {
 }
 
     @ViewBuilder private func gyro(_ layer: LayerModel) -> some View {
-        Text("Configure how this layer responds to device tilt. You can add up to 10 dictionaries.").font(.caption).foregroundStyle(.secondary)
-        Button("Add Gyro Dictionary", systemImage: "plus") { update { if ($0.gyroDictionaries?.count ?? 0) < 10 { $0.gyroDictionaries = ($0.gyroDictionaries ?? []) + [.init(layerName: $0.name)] } } }
-        ForEach(layer.gyroDictionaries ?? []) { dictionary in
-            DisclosureGroup(dictionary.title) {
-                Picker("Axis", selection: gyroBinding(dictionary.id, \.axis, dictionary.axis)) { Text("X").tag("x"); Text("Y").tag("y") }; TextField("Title", text: gyroBinding(dictionary.id, \.title, dictionary.title)).textFieldStyle(.roundedBorder); TextField("Layer Name", text: gyroBinding(dictionary.id, \.layerName, dictionary.layerName)).textFieldStyle(.roundedBorder); TextField("Key Path", text: gyroBinding(dictionary.id, \.keyPath, dictionary.keyPath)).textFieldStyle(.roundedBorder)
-                LabeledContent("Map Minimum") { TextField("Minimum", value: gyroBinding(dictionary.id, \.mapMinTo, dictionary.mapMinTo), format: .number).textFieldStyle(.roundedBorder) }; LabeledContent("Map Maximum") { TextField("Maximum", value: gyroBinding(dictionary.id, \.mapMaxTo, dictionary.mapMaxTo), format: .number).textFieldStyle(.roundedBorder) }
-                Button("Remove", role: .destructive) { update { $0.gyroDictionaries?.removeAll { $0.id == dictionary.id } } }
-            }.padding(10).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+        let dictionaries = layer.gyroDictionaries ?? []
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Gyro Dictionaries").font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Button("+ Add Dictionary") {
+                        update { target in
+                            var values = target.gyroDictionaries ?? []
+                            guard values.count < 10 else { return }
+                            values.append(.init(
+                                id: UUID(), axis: "x", keyPath: "position.x", layerName: target.name,
+                                mapMinTo: -50, mapMaxTo: 50, title: "New Gyro Effect", view: "Wallpaper"
+                            ))
+                            target.gyroDictionaries = values
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(dictionaries.count >= 10)
+                }
+                Text("Configure how this layer responds to device tilt. You can add up to 10 dictionaries (2 axes × 5 keyPaths) for this layer. (\(dictionaries.count)/10)")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+
+            if dictionaries.isEmpty {
+                Text("No gyro dictionaries yet. Click \"+ Add Dictionary\" to create one.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(16)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+            } else {
+                ForEach(dictionaries) { dictionary in
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            TextField("e.g., Tilt Effect", text: gyroBinding(dictionary.id, \.title, dictionary.title))
+                                .textFieldStyle(.roundedBorder)
+                            Button(role: .destructive) {
+                                update { $0.gyroDictionaries?.removeAll { $0.id == dictionary.id } }
+                            } label: { Image(systemName: "xmark") }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Remove gyro dictionary")
+                        }
+                        HStack(alignment: .top, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Axis").font(.caption).foregroundStyle(.secondary)
+                                Picker("Axis", selection: gyroBinding(dictionary.id, \.axis, dictionary.axis)) {
+                                    Text("X (Left/Right)").tag("x")
+                                    Text("Y (Up/Down)").tag("y")
+                                }
+                                .labelsHidden().pickerStyle(.menu)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Key Path").font(.caption).foregroundStyle(.secondary)
+                                Picker("Key Path", selection: gyroBinding(dictionary.id, \.keyPath, dictionary.keyPath)) {
+                                    Text("position.x").tag("position.x")
+                                    Text("position.y").tag("position.y")
+                                    Text("transform.translation.x").tag("transform.translation.x")
+                                    Text("transform.translation.y").tag("transform.translation.y")
+                                    Text("transform.rotation.x").tag("transform.rotation.x")
+                                    Text("transform.rotation.y").tag("transform.rotation.y")
+                                    Text("transform.rotation.z").tag("transform.rotation.z")
+                                    Text("anchorPoint.x").tag("anchorPoint.x")
+                                    Text("anchorPoint.y").tag("anchorPoint.y")
+                                }
+                                .labelsHidden().pickerStyle(.menu)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        HStack(alignment: .top, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Map Min To").font(.caption).foregroundStyle(.secondary)
+                                TextField("e.g., -50", value: gyroBinding(dictionary.id, \.mapMinTo, dictionary.mapMinTo), format: .number)
+                                    .keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder)
+                                Text("Min value (radians for rotation, px for position)").font(.caption2).foregroundStyle(.secondary)
+                            }
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Map Max To").font(.caption).foregroundStyle(.secondary)
+                                TextField("e.g., 50", value: gyroBinding(dictionary.id, \.mapMaxTo, dictionary.mapMaxTo), format: .number)
+                                    .keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder)
+                                Text("Max value (radians for rotation, px for position)").font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+                }
+            }
         }
     }
 
