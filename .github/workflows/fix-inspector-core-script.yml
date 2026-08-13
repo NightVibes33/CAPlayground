@@ -1,0 +1,34 @@
+name: Fix staged inspector parity patch
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/fix-inspector-core-script.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Remove undefined safe subscript from staged patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/inspector_core_patch.py')
+          s = p.read_text()
+          old = 'selected?.gradientStops?[safe: index]?.opacity ?? stop.opacity'
+          if s.count(old) != 2:
+              raise SystemExit(f'expected 2 matches, found {s.count(old)}')
+          p.write_text(s.replace(old, 'stop.opacity'))
+          Path('.github/workflows/fix-inspector-core-script.yml').unlink()
+          PY
+      - name: Commit staged patch fix
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Fix staged inspector parity patch'
+          git push origin HEAD:agent/native-ios-conversion
