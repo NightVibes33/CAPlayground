@@ -1,0 +1,24 @@
+name: Apply final Inspector parity
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/final-inspector-parity.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Apply Replicator and Filters parity
+        run: python3 .github/final_inspector_patch.py
+      - name: Commit final Inspector parity
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Match Replicator and Filters to website'
+          git push origin HEAD:agent/native-ios-conversion
