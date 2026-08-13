@@ -395,4 +395,31 @@ private extension Data {
         XCTAssertEqual(imported.documents[.wallpaper]?.stateOverrides["Sleep"]?.first(where: { $0.targetID == transformID && $0.keyPath == "position.x" })?.value, .number(160))
     }
 
+
+    func testStateExportFillsCounterpartOverridesAndDefaultTransitions() {
+        var project = CAProjectDocument.blank(name: "State Parity")
+        let layerID = UUID()
+        var layer = LayerModel(id: layerID, name: "State Layer", kind: .basic,
+                               position: .init(x: 100, y: 200), size: .init(width: 80, height: 90))
+        layer.opacity = 1
+        project.root.children = [layer]
+        project.states = ["Locked", "Unlock", "Sleep"]
+        project.stateOverrides = [
+            "Locked": [.init(targetID: layerID, keyPath: "opacity", value: .number(0.25))]
+        ]
+        project.stateTransitions = []
+
+        let xml = CAMLSerializer.serialize(project: project, document: project.documents[.floating]!, kind: .floating)
+        let overrideMarker = "targetId=\"\(layerID.uuidString)\" keyPath=\"opacity\""
+        XCTAssertEqual(xml.components(separatedBy: overrideMarker).count - 1, 3)
+        XCTAssertTrue(xml.contains("<value type=\"real\" value=\"0.25\"/>"))
+        XCTAssertGreaterThanOrEqual(xml.components(separatedBy: "<value type=\"integer\" value=\"1\"/>").count - 1, 2)
+        XCTAssertTrue(xml.contains("fromState=\"*\" toState=\"Unlock\""))
+        XCTAssertTrue(xml.contains("fromState=\"Unlock\" toState=\"*\""))
+        XCTAssertTrue(xml.contains("fromState=\"*\" toState=\"Locked\""))
+        XCTAssertTrue(xml.contains("fromState=\"Locked\" toState=\"*\""))
+        XCTAssertTrue(xml.contains("fromState=\"*\" toState=\"Sleep\""))
+        XCTAssertTrue(xml.contains("fromState=\"Sleep\" toState=\"*\""))
+    }
+
 }

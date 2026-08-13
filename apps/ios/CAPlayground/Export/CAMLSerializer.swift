@@ -221,19 +221,34 @@ enum CAMLSerializer {
     }
 
     private static func states(_ document: AnimationDocument) -> String {
-        let names = document.states.filter { !$0.lowercased().hasPrefix("base") }
+        let filtered = document.states.filter { !$0.lowercased().hasPrefix("base") }
+        let names = filtered.isEmpty ? ["Locked", "Unlock", "Sleep"] : filtered
+        let normalized = normalizedStateOverrides(document, names: names)
         let stateXML = names.map { name in
-            let overrides = document.stateOverrides[name] ?? []
+            let overrides = normalized[name] ?? []
             let elements = overrides.map { value in
                 let encoded: (String, String) = switch value.value {
-                case .number(let valueNumber): (valueNumber.rounded() == valueNumber ? "integer" : "real", number(value.keyPath.hasPrefix("transform.rotation") ? valueNumber * .pi / 180 : valueNumber))
-                case .string(let string): (value.keyPath == "backgroundColor" ? "CGColor" : "string", value.keyPath == "backgroundColor" ? (color(string) ?? "1 1 1") : string)
+                case .number(let valueNumber):
+                    if value.keyPath == "position.x" || value.keyPath == "position.y" {
+                        ("integer", number(valueNumber.rounded()))
+                    } else {
+                        let converted = value.keyPath.hasPrefix("transform.rotation") ? valueNumber * .pi / 180 : valueNumber
+                        (converted.rounded() == converted ? "integer" : "real", number(converted))
+                    }
+                case .string(let string):
+                    (value.keyPath == "backgroundColor" ? "CGColor" : "string", value.keyPath == "backgroundColor" ? (color(string) ?? "1 1 1") : string)
                 }
                 return "        <LKStateSetValue targetId=\"\(value.targetID.uuidString)\" keyPath=\"\(escape(value.keyPath))\"><value type=\"\(encoded.0)\" value=\"\(escape(encoded.1))\"/></LKStateSetValue>"
-            }.joined(separator: "\n")
-            return "    <LKState name=\"\(escape(name))\"><elements>\n\(elements)\n      </elements></LKState>"
-        }.joined(separator: "\n")
-        let transitionXML = document.stateTransitions.map { transition in
+            }.joined(separator: "
+")
+            return "    <LKState name=\"\(escape(name))\"><elements>
+\(elements)
+      </elements></LKState>"
+        }.joined(separator: "
+")
+
+        let transitions = document.stateTransitions.isEmpty ? defaultStateTransitions() : document.stateTransitions
+        let transitionXML = transitions.map { transition in
             let elements = transition.elements.map { element in
                 guard let spring = element.animation else { return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"/>" }
                 var attrs = "type=\"\(escape(spring.type))\" damping=\"\(number(spring.damping))\" mass=\"\(number(spring.mass))\" stiffness=\"\(number(spring.stiffness))\" velocity=\"\(number(spring.initialVelocity))\""
@@ -242,10 +257,71 @@ enum CAMLSerializer {
                 if let keyPath = spring.keyPath { attrs += " keyPath=\"\(escape(keyPath))\"" }
                 if let recalculates = spring.micaAutorecalculatesDuration { attrs += " mica_autorecalculatesDuration=\"\(recalculates ? "1" : "0")\"" }
                 return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"><animation \(attrs)/></LKStateTransitionElement>"
-            }.joined(separator: "\n")
-            return "    <LKStateTransition fromState=\"\(escape(transition.fromState))\" toState=\"\(escape(transition.toState))\"><elements>\n\(elements)\n      </elements></LKStateTransition>"
-        }.joined(separator: "\n")
-        return "\n    <states>\n\(stateXML)\n    </states>\n    <stateTransitions>\n\(transitionXML)\n    </stateTransitions>"
+            }.joined(separator: "
+")
+            return "    <LKStateTransition fromState=\"\(escape(transition.fromState))\" toState=\"\(escape(transition.toState))\"><elements>
+\(elements)
+      </elements></LKStateTransition>"
+        }.joined(separator: "
+")
+        return "
+    <states>
+\(stateXML)
+    </states>
+    <stateTransitions>
+\(transitionXML)
+    </stateTransitions>"
+    }
+
+    private static func normalizedStateOverrides(_ document: AnimationDocument, names: [String]) -> [String: [StateOverride]] {
+        var result = document.stateOverrides
+        var keys: [(UUID, String)] = []
+        for name in names {
+            for override in result[name] ?? [] where !keys.contains(where: { $0.0 == override.targetID && $0.1 == override.keyPath }) {
+                keys.append((override.targetID, override.keyPath))
+            }
+        }
+        for (targetID, keyPath) in keys {
+            guard let fallback = baseStateValue(root: document.root, targetID: targetID, keyPath: keyPath) else { continue }
+            for name in names {
+                var values = result[name] ?? []
+                if !values.contains(where: { $0.targetID == targetID && $0.keyPath == keyPath }) {
+                    values.append(.init(targetID: targetID, keyPath: keyPath, value: fallback))
+                    result[name] = values
+                }
+            }
+        }
+        return result
+    }
+
+    private static func baseStateValue(root: LayerModel, targetID: UUID, keyPath: String) -> OverrideValue? {
+        guard let layer = root.find(id: targetID) else { return nil }
+        return switch keyPath {
+        case "position.x": .number(layer.position.x)
+        case "position.y": .number(layer.position.y)
+        case "zPosition": .number(layer.zPosition)
+        case "bounds.size.width": .number(layer.size.width)
+        case "bounds.size.height": .number(layer.size.height)
+        case "transform.scale.xy": .number(layer.scale)
+        case "transform.rotation.z": .number(layer.rotation)
+        case "transform.rotation.x": .number(layer.rotationX)
+        case "transform.rotation.y": .number(layer.rotationY)
+        case "opacity": .number(layer.opacity)
+        case "cornerRadius": .number(layer.cornerRadius)
+        case "backgroundColor": .string(layer.backgroundColor ?? "#FFFFFF")
+        default: nil
+        }
+    }
+
+    private static func defaultStateTransitions() -> [StateTransition] {
+        [
+            .init(fromState: "*", toState: "Unlock", elements: []),
+            .init(fromState: "Unlock", toState: "*", elements: []),
+            .init(fromState: "*", toState: "Locked", elements: []),
+            .init(fromState: "Locked", toState: "*", elements: []),
+            .init(fromState: "*", toState: "Sleep", elements: []),
+            .init(fromState: "Sleep", toState: "*", elements: [])
+        ]
     }
 
     private static func emitterCells(_ cells: [EmitterCellModel], indent: Int) -> String {
