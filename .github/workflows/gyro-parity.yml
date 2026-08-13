@@ -1,0 +1,24 @@
+name: Apply Gyro serialization and inspector parity
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/gyro-parity.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Apply Gyro parity
+        run: python3 .github/gyro_parity_patch.py
+      - name: Commit Gyro parity
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Match Gyro wallpaper serialization to website'
+          git push origin HEAD:agent/native-ios-conversion
