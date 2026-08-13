@@ -1,0 +1,47 @@
+name: Fix Gyro serializer string escaping
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/fix-gyro-serializer-strings.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Restore escaped newlines
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('apps/ios/CAPlayground/Export/CAMLSerializer.swift')
+          s = p.read_text()
+          fixes = {
+              'return "\n\\(pad)    <NSDictionary>" +': 'return "\\n\\(pad)    <NSDictionary>" +',
+              'return "\n\\(pad)<style>" +': 'return "\\n\\(pad)<style>" +',
+              '            "\n\\(pad)  <wallpaperBackgroundAssetNames': '            "\\n\\(pad)  <wallpaperBackgroundAssetNames',
+              '            "\n\\(pad)  <wallpaperFloatingAssetNames': '            "\\n\\(pad)  <wallpaperFloatingAssetNames',
+              '            "\n\\(pad)  <wallpaperParallaxGroups': '            "\\n\\(pad)  <wallpaperParallaxGroups',
+              '            "\n\\(pad)  <wallpaperPropertyGroups': '            "\\n\\(pad)  <wallpaperPropertyGroups',
+              '            "\n\\(pad)</style>"': '            "\\n\\(pad)</style>"',
+              '\\(parallax)\n\\(pad)  </wallpaperParallaxGroups>': '\\(parallax)\\n\\(pad)  </wallpaperParallaxGroups>',
+              '\\(properties)\n\\(pad)  </wallpaperPropertyGroups>': '\\(properties)\\n\\(pad)  </wallpaperPropertyGroups>',
+          }
+          for old, new in fixes.items():
+              count = s.count(old)
+              if count == 0:
+                  raise SystemExit(f'missing serializer escape marker: {old!r}')
+              s = s.replace(old, new)
+          p.write_text(s)
+          Path('.github/workflows/fix-gyro-serializer-strings.yml').unlink()
+          PY
+      - name: Commit serializer escape fix
+        run: |
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Fix Gyro serializer string escapes'
+          git push origin HEAD:agent/native-ios-conversion
