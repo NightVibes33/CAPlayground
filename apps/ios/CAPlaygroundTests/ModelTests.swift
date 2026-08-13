@@ -422,4 +422,32 @@ private extension Data {
         XCTAssertTrue(xml.contains("fromState=\"Sleep\" toState=\"*\""))
     }
 
+
+    func testFilterNamesAndParameterlessInvertRoundTrip() throws {
+        var project = CAProjectDocument.blank(name: "Filters")
+        let layerID = UUID()
+        var layer = LayerModel(id: layerID, name: "Filtered", kind: .basic,
+                               position: .init(x: 100, y: 100), size: .init(width: 100, height: 100))
+        layer.filters = [
+            FilterModel(type: "gaussianBlur", name: "Gaussian Blur 1", value: 10),
+            FilterModel(type: "gaussianBlur", name: "Gaussian Blur 2", value: 20),
+            FilterModel(type: "colorInvert", name: "Invert 1", value: 0)
+        ]
+        project.root.children = [layer]
+
+        let archive = try CAArchiveExporter.export(project: project, format: .ca, license: .none)
+        let entries = try ZIPArchive.extract(archive)
+        let caml = try XCTUnwrap(entries.first(where: { $0.path == "Floating.ca/main.caml" }))
+        let xml = try XCTUnwrap(String(data: caml.data, encoding: .utf8))
+        XCTAssertTrue(xml.contains("name=\"Gaussian Blur 1\""))
+        XCTAssertTrue(xml.contains("name=\"Gaussian Blur 2\""))
+        XCTAssertTrue(xml.contains("filter=\"colorInvert\" name=\"Invert 1\" enabled=\"true\"/>"))
+        XCTAssertFalse(xml.contains("filter=\"colorInvert\" name=\"Invert 1\" enabled=\"true\" inputAmount"))
+
+        let imported = try CAArchiveImporter.importProject(data: archive, suggestedName: "Filters.ca")
+        let importedLayer = try XCTUnwrap(imported.documents[.floating]?.root.find(id: layerID))
+        XCTAssertEqual(importedLayer.filters.map(\.name), ["Gaussian Blur 1", "Gaussian Blur 2", "Invert 1"])
+        XCTAssertEqual(importedLayer.filters.last?.value, 0)
+    }
+
 }

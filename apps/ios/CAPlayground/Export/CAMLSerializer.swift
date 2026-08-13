@@ -177,17 +177,41 @@ enum CAMLSerializer {
 
     private static func filters(_ filters: [FilterModel], indent: Int) -> String {
         let pad = String(repeating: "  ", count: indent)
+        var counts: [String: Int] = [:]
         let items = filters.map { filter -> String in
+            counts[filter.type, default: 0] += 1
+            let exportName = filter.name ?? "\(filterDisplayName(filter.type)) \(counts[filter.type] ?? 1)"
             let enabled = filter.enabled ? "true" : "false"
             switch filter.type {
-            case "gaussianBlur": return "\n\(pad)  <CAFilter filter=\"gaussianBlur\" name=\"gaussianBlur\" enabled=\"\(enabled)\" inputRadius=\"\(number(filter.value))\"/>"
-            case "colorContrast", "colorSaturate": return "\n\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(filter.type))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
-            case "colorHueRotate": return "\n\(pad)  <CAFilter filter=\"colorHueRotate\" name=\"colorHueRotate\" enabled=\"\(enabled)\" inputAngle=\"\(number(filter.value * .pi / 180))\"/>"
-            case "CISepiaTone": return "\n\(pad)  <CIFilter filter=\"CISepiaTone\" name=\"CISepiaTone\" enabled=\"\(enabled)\"><inputIntensity type=\"real\" value=\"\(number(filter.value))\"/></CIFilter>"
-            default: return "\n\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(filter.type))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
+            case "gaussianBlur": return "
+\(pad)  <CAFilter filter=\"gaussianBlur\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputRadius=\"\(number(filter.value))\"/>"
+            case "colorContrast", "colorSaturate": return "
+\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
+            case "colorHueRotate": return "
+\(pad)  <CAFilter filter=\"colorHueRotate\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputAngle=\"\(number(filter.value * .pi / 180))\"/>"
+            case "colorInvert": return "
+\(pad)  <CAFilter filter=\"colorInvert\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\"/>"
+            case "CISepiaTone": return "
+\(pad)  <CIFilter filter=\"CISepiaTone\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\"><inputIntensity type=\"real\" value=\"\(number(filter.value))\"/></CIFilter>"
+            default: return "
+\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(exportName))\" enabled=\"\(enabled)/>"
             }
         }.joined()
-        return "\n\(pad)<filters>\(items)\n\(pad)</filters>"
+        return "
+\(pad)<filters>\(items)
+\(pad)</filters>"
+    }
+
+    private static func filterDisplayName(_ type: String) -> String {
+        switch type {
+        case "gaussianBlur": "Gaussian Blur"
+        case "colorContrast": "Contrast"
+        case "colorHueRotate": "Hue Rotate"
+        case "colorInvert": "Invert"
+        case "colorSaturate": "Saturate"
+        case "CISepiaTone": "Sepia"
+        default: type
+        }
     }
 
     private static func animations(_ animations: [KeyframeAnimationModel], indent: Int) -> String {

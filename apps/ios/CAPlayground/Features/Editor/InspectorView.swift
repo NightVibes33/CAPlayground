@@ -876,41 +876,150 @@ struct InspectorView: View {
     }
 
     @ViewBuilder private func replicator(_ layer: LayerModel) -> some View {
-        optionalIntegerField("Instance Count", layer.instanceCount ?? 1, \.instanceCount); optionalField("Translation X", layer.instanceTranslationX ?? 0, \.instanceTranslationX); optionalField("Translation Y", layer.instanceTranslationY ?? 0, \.instanceTranslationY); optionalField("Translation Z", layer.instanceTranslationZ ?? 0, \.instanceTranslationZ); optionalField("Instance Rotation (Z axis, degrees)", layer.instanceRotation ?? 0, \.instanceRotation); optionalField("Instance Delay (seconds)", layer.instanceDelay ?? 0, \.instanceDelay)
-    }
-
-    @ViewBuilder private func filters(_ layer: LayerModel) -> some View {
-        Menu("Add filter") { Button("Gaussian Blur") { addFilter(type: "gaussianBlur", value: 10) }; Button("Contrast") { addFilter(type: "colorContrast", value: 1) }; Button("Hue Rotate") { addFilter(type: "colorHueRotate", value: 0) }; Button("Invert") { addFilter(type: "colorInvert", value: 0) }; Button("Saturate") { addFilter(type: "colorSaturate", value: 0) }; Button("Sepia") { addFilter(type: "CISepiaTone", value: 1) } }
-        ForEach(layer.filters) { filter in
-            VStack(alignment: .leading, spacing: 10) {
-                HStack { Toggle(filterName(filter.type), isOn: filterBinding(filter.id, \.enabled, filter.enabled)); Spacer(); Button(role: .destructive) { update { $0.filters.removeAll { $0.id == filter.id } } } label: { Image(systemName: "xmark") }.buttonStyle(.bordered).controlSize(.small).accessibilityLabel("Remove filter") }
-                if filter.type == "colorHueRotate" { Text("Angle").font(.caption).foregroundStyle(.secondary); HStack { Slider(value: filterBinding(filter.id, \.value, filter.value), in: -180...180, step: 1); Text("\(Int(filter.value.rounded()))°").monospacedDigit().frame(width: 52, alignment: .trailing) } }
-                else if filter.type != "colorInvert" { LabeledContent(filterValueLabel(filter.type)) { TextField(filterValueLabel(filter.type), value: filterBinding(filter.id, \.value, filter.value), format: .number).multilineTextAlignment(.trailing).keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder).frame(maxWidth: 120) } }
-            }.padding(10).overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Instance Count").font(.caption).foregroundStyle(.secondary)
+                TextField("Instance Count", value: replicatorCountBinding(layer), format: .number)
+                    .keyboardType(.numberPad).textFieldStyle(.roundedBorder)
+                Text("Number of replicated instances (including the original layer)").font(.caption2).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Instance Translation").font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    replicatorNumberField("X (px)", \.instanceTranslationX, layer.instanceTranslationX ?? 0)
+                    replicatorNumberField("Y (px)", \.instanceTranslationY, layer.instanceTranslationY ?? 0)
+                    replicatorNumberField("Z (px)", \.instanceTranslationZ, layer.instanceTranslationZ ?? 0)
+                }
+                Text("Translation offset for each replicated instance").font(.caption2).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Instance Rotation (Z axis, degrees)").font(.caption).foregroundStyle(.secondary)
+                TextField("Instance Rotation", value: replicatorDoubleBinding(\.instanceRotation, fallback: layer.instanceRotation ?? 0), format: .number)
+                    .keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder)
+                Text("Rotation offset for each replicated instance").font(.caption2).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Instance Delay (seconds)").font(.caption).foregroundStyle(.secondary)
+                TextField("Instance Delay", value: replicatorDelayBinding(layer), format: .number.precision(.fractionLength(0...2)))
+                    .keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
+                Text("Delay between each instance appearing (for animations)").font(.caption2).foregroundStyle(.secondary)
+            }
         }
     }
 
-    private func addFilter(type: String, value: Double) { update { $0.filters.append(.init(type: type, value: value)) } }
+    private func replicatorCountBinding(_ layer: LayerModel) -> Binding<Int> {
+        Binding(
+            get: { selectedID.flatMap { project.root.find(id: $0) }?.instanceCount ?? layer.instanceCount ?? 1 },
+            set: { new in update { $0.instanceCount = min(100, max(1, new)) } }
+        )
+    }
+
+    private func replicatorDelayBinding(_ layer: LayerModel) -> Binding<Double> {
+        Binding(
+            get: { selectedID.flatMap { project.root.find(id: $0) }?.instanceDelay ?? layer.instanceDelay ?? 0 },
+            set: { new in update { $0.instanceDelay = max(0, new) } }
+        )
+    }
+
+    private func replicatorDoubleBinding(_ keyPath: WritableKeyPath<LayerModel, Double?>, fallback: Double) -> Binding<Double> {
+        Binding(
+            get: { selectedID.flatMap { project.root.find(id: $0) }?[keyPath: keyPath] ?? fallback },
+            set: { new in update { $0[keyPath: keyPath] = new } }
+        )
+    }
+
+    private func replicatorNumberField(_ title: String, _ keyPath: WritableKeyPath<LayerModel, Double?>, _ fallback: Double) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+            TextField(title, value: replicatorDoubleBinding(keyPath, fallback: fallback), format: .number)
+                .keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder private func filters(_ layer: LayerModel) -> some View {
+        Menu("Add filter") {
+            Button("Gaussian Blur") { addFilter(type: "gaussianBlur", value: 10) }
+            Button("Contrast") { addFilter(type: "colorContrast", value: 1) }
+            Button("Hue Rotate") { addFilter(type: "colorHueRotate", value: 0) }
+            Button("Invert") { addFilter(type: "colorInvert", value: 0) }
+            Button("Saturate") { addFilter(type: "colorSaturate", value: 0) }
+            Button("Sepia") { addFilter(type: "CISepiaTone", value: 1) }
+        }
+        ForEach(layer.filters) { filter in
+            VStack(alignment: .leading, spacing: 10) {
+                Divider().padding(.vertical, 4)
+                HStack(spacing: 8) {
+                    Button {
+                        let enabled = filterBinding(filter.id, \.enabled, filter.enabled)
+                        enabled.wrappedValue.toggle()
+                    } label: {
+                        Image(systemName: filter.enabled ? "checkmark.square.fill" : "square")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Enable filter")
+                    Text(filterDisplayName(filter, in: layer.filters)).font(.caption)
+                    Spacer()
+                    Button(role: .destructive) { update { $0.filters.removeAll { $0.id == filter.id } } } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderedProminent).controlSize(.mini).accessibilityLabel("Remove filter")
+                }
+                if filter.type == "colorHueRotate" {
+                    filterHueKnob(binding: filterBinding(filter.id, \.value, filter.value))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 2)
+                } else if filter.type != "colorInvert" {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(filterValueLabel(filter.type)).font(.caption).foregroundStyle(.secondary)
+                        TextField(filterValueLabel(filter.type), value: filterBinding(filter.id, \.value, filter.value), format: .number)
+                            .keyboardType(.numbersAndPunctuation).textFieldStyle(.roundedBorder)
+                    }
+                }
+            }
+        }
+    }
+
+    private func addFilter(type: String, value: Double) {
+        let count = selected?.filters.filter { $0.type == type }.count ?? 0
+        let name = "\(filterName(type)) \(count + 1)"
+        update { $0.filters.append(.init(type: type, name: name, value: value)) }
+    }
+
+    private func filterDisplayName(_ filter: FilterModel, in filters: [FilterModel]) -> String {
+        if let name = filter.name, !name.isEmpty { return name }
+        var occurrence = 0
+        for item in filters where item.type == filter.type {
+            occurrence += 1
+            if item.id == filter.id { break }
+        }
+        return "\(filterName(filter.type)) \(max(occurrence, 1))"
+    }
+
+    private func filterHueKnob(binding: Binding<Double>) -> some View {
+        VStack(spacing: 5) {
+            ZStack {
+                Circle().fill(Color.secondary.opacity(0.08))
+                Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                Capsule().fill(CATheme.accent).frame(width: 2, height: 22).offset(y: -12)
+                    .rotationEffect(.degrees(binding.wrappedValue))
+            }
+            .frame(width: 72, height: 72)
+            .contentShape(Circle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { gesture in
+                let dx = gesture.location.x - 36
+                let dy = gesture.location.y - 36
+                binding.wrappedValue = (atan2(dx, -dy) * 180 / .pi).rounded()
+            })
+            Text("Angle").font(.caption2).foregroundStyle(.secondary)
+            HStack(spacing: 2) {
+                TextField("Angle", value: binding, format: .number.precision(.fractionLength(0)))
+                    .multilineTextAlignment(.center).textFieldStyle(.roundedBorder).frame(width: 64)
+                Text("°").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private func filterName(_ type: String) -> String { switch type { case "gaussianBlur": "Gaussian Blur"; case "colorContrast": "Contrast"; case "colorHueRotate": "Hue Rotate"; case "colorInvert": "Invert"; case "colorSaturate": "Saturate"; case "CISepiaTone": "Sepia"; default: type } }
     private func filterValueLabel(_ type: String) -> String { switch type { case "gaussianBlur": "Radius"; case "colorContrast", "colorSaturate": "Amount"; case "CISepiaTone": "Intensity"; case "colorHueRotate": "Angle"; default: "Value" } }
-    private func update(_ mutation: (inout LayerModel) -> Void) { guard let selectedID else { return }; project.root.update(id: selectedID, mutation: mutation) }
-
-    @MainActor private func importImage(_ url: URL) async { do { let imported = try await NativeImageAssetLoader.load(url); let name = project.uniqueAssetName(imported.filename, defaultExtension: "png"); project.setAsset(imported.data, named: name); update { $0.imageName = name } } catch { } }
-    @MainActor private func importEmitterCellImage(_ url: URL, targetID: UUID?) async { do { let imported = try await NativeImageAssetLoader.load(url); let name = project.uniqueAssetName(imported.filename, defaultExtension: "png"); project.setAsset(imported.data, named: name); update { layer in if let targetID, let index = layer.emitterCells?.firstIndex(where: { $0.id == targetID }) { layer.emitterCells?[index].imageName = name } else { var cells = layer.emitterCells ?? []; var cell = EmitterCellModel(); cell.imageName = name; cells.append(cell); layer.emitterCells = cells } } } catch { } }
-
-    private func selectedImage(_ layer: LayerModel) -> UIImage? { guard let name = layer.imageName, let data = project.assetData(named: name) else { return nil }; return UIImage(data: data) }
-    private func resetImageBounds(_ layer: LayerModel) { guard let image = selectedImage(layer) else { return }; let width = Double(image.cgImage?.width ?? Int(image.size.width * image.scale)), height = Double(image.cgImage?.height ?? Int(image.size.height * image.scale)); updateSelectedSize(width: width, height: height) }
-    private func updateSelectedSize(width: Double, height: Double) { guard let selectedID else { return }; project.updateStateAware(targetID: selectedID, values: ["bounds.size.width": width, "bounds.size.height": height]) { $0.size = .init(width: width, height: height) } }
-
-    private func applyCrop(to layer: LayerModel, crop: CGRect, maintainBounds: Bool) {
-        guard let image = selectedImage(layer), let source = image.cgImage else { return }
-        let width = CGFloat(source.width), height = CGFloat(source.height)
-        let pixelRect = CGRect(x: crop.minX * width, y: crop.minY * height, width: crop.width * width, height: crop.height * height).integral.intersection(CGRect(x: 0, y: 0, width: width, height: height))
-        guard pixelRect.width > 0, pixelRect.height > 0, let cropped = source.cropping(to: pixelRect) else { return }
-        let edited = UIImage(cgImage: cropped, scale: 1, orientation: .up)
-        storeEditedImage(edited, originalName: layer.imageName ?? "image.png", suffix: "cropped")
-        if !maintainBounds { updateSelectedSize(width: Double(cropped.width), height: Double(cropped.height)) }
-    }
 
     private func applyBlur(to layer: LayerModel, amount: Double) {
         guard let image = selectedImage(layer), let cgImage = image.cgImage else { return }

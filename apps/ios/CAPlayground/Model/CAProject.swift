@@ -88,7 +88,7 @@ enum LayerKind: String, Codable, CaseIterable, Identifiable {
 }
 
 struct GradientStop: Codable, Hashable { var color: String; var opacity: Double }
-struct FilterModel: Codable, Hashable, Identifiable { var id = UUID(); var type: String; var value: Double; var enabled = true }
+struct FilterModel: Codable, Hashable, Identifiable { var id = UUID(); var type: String; var name: String? = nil; var value: Double; var enabled = true }
 
 struct EmitterCellModel: Codable, Hashable, Identifiable {
     var id: UUID; var name: String; var imageName: String?; var contentsScale: Double

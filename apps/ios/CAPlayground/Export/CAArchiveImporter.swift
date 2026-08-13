@@ -565,9 +565,11 @@ private final class CAMLImporter: NSObject, XMLParserDelegate {
         if type == "gaussianBlur" { rawValue = number(attributes["inputRadius"]) ?? 0 }
         else if type == "colorContrast" || type == "colorSaturate" { rawValue = number(attributes["inputAmount"]) ?? 1 }
         else if type == "colorHueRotate" { rawValue = (number(attributes["inputAngle"]) ?? 0) * 180 / .pi }
+        else if type == "colorInvert" { rawValue = 0 }
         else { rawValue = number(attributes["inputIntensity"]) ?? 1 }
         layerStack[index].layer.filters.append(.init(
             type: type,
+            name: attributes["name"],
             value: rawValue,
             enabled: attributes["enabled"].map(bool) ?? true
         ))
