@@ -147,8 +147,8 @@ replace_func('gradient', 'image', r'''    @ViewBuilder private func gradient(_ l
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Opacity").font(.caption2).foregroundStyle(.secondary)
                     HStack(spacing: 6) {
-                        Slider(value: Binding(get: { selected?.gradientStops?[safe: index]?.opacity ?? stop.opacity }, set: { v in update { $0.gradientStops?[index].opacity = v } }), in: 0...1, step: 0.01)
-                        Text("\(Int(((selected?.gradientStops?[safe: index]?.opacity ?? stop.opacity) * 100).rounded()))%").font(.caption2).foregroundStyle(.secondary).frame(width: 36)
+                        Slider(value: Binding(get: { stop.opacity }, set: { v in update { $0.gradientStops?[index].opacity = v } }), in: 0...1, step: 0.01)
+                        Text("\(Int(((stop.opacity) * 100).rounded()))%").font(.caption2).foregroundStyle(.secondary).frame(width: 36)
                     }
                 }
                 Button(role: .destructive) { update { $0.gradientStops?.remove(at: index) } } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel("Remove color")
