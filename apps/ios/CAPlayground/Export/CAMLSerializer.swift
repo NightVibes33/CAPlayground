@@ -183,23 +183,21 @@ enum CAMLSerializer {
             let exportName = filter.name ?? "\(filterDisplayName(filter.type)) \(counts[filter.type] ?? 1)"
             let enabled = filter.enabled ? "true" : "false"
             switch filter.type {
-            case "gaussianBlur": return "
-\(pad)  <CAFilter filter=\"gaussianBlur\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputRadius=\"\(number(filter.value))\"/>"
-            case "colorContrast", "colorSaturate": return "
-\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
-            case "colorHueRotate": return "
-\(pad)  <CAFilter filter=\"colorHueRotate\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputAngle=\"\(number(filter.value * .pi / 180))\"/>"
-            case "colorInvert": return "
-\(pad)  <CAFilter filter=\"colorInvert\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\"/>"
-            case "CISepiaTone": return "
-\(pad)  <CIFilter filter=\"CISepiaTone\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\"><inputIntensity type=\"real\" value=\"\(number(filter.value))\"/></CIFilter>"
-            default: return "
-\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(exportName))\" enabled=\"\(enabled)/>"
+            case "gaussianBlur":
+                return "\n\(pad)  <CAFilter filter=\"gaussianBlur\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputRadius=\"\(number(filter.value))\"/>"
+            case "colorContrast", "colorSaturate":
+                return "\n\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputAmount=\"\(number(filter.value))\"/>"
+            case "colorHueRotate":
+                return "\n\(pad)  <CAFilter filter=\"colorHueRotate\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\" inputAngle=\"\(number(filter.value * .pi / 180))\"/>"
+            case "colorInvert":
+                return "\n\(pad)  <CAFilter filter=\"colorInvert\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\"/>"
+            case "CISepiaTone":
+                return "\n\(pad)  <CIFilter filter=\"CISepiaTone\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\"><inputIntensity type=\"real\" value=\"\(number(filter.value))\"/></CIFilter>"
+            default:
+                return "\n\(pad)  <CAFilter filter=\"\(escape(filter.type))\" name=\"\(escape(exportName))\" enabled=\"\(enabled)\"/>"
             }
         }.joined()
-        return "
-\(pad)<filters>\(items)
-\(pad)</filters>"
+        return "\n\(pad)<filters>\(items)\n\(pad)</filters>"
     }
 
     private static func filterDisplayName(_ type: String) -> String {
@@ -260,41 +258,35 @@ enum CAMLSerializer {
                         (converted.rounded() == converted ? "integer" : "real", number(converted))
                     }
                 case .string(let string):
-                    (value.keyPath == "backgroundColor" ? "CGColor" : "string", value.keyPath == "backgroundColor" ? (color(string) ?? "1 1 1") : string)
+                    (
+                        value.keyPath == "backgroundColor" ? "CGColor" : "string",
+                        value.keyPath == "backgroundColor" ? (color(string) ?? "1 1 1") : string
+                    )
                 }
                 return "        <LKStateSetValue targetId=\"\(value.targetID.uuidString)\" keyPath=\"\(escape(value.keyPath))\"><value type=\"\(encoded.0)\" value=\"\(escape(encoded.1))\"/></LKStateSetValue>"
-            }.joined(separator: "
-")
-            return "    <LKState name=\"\(escape(name))\"><elements>
-\(elements)
-      </elements></LKState>"
-        }.joined(separator: "
-")
+            }.joined(separator: "\n")
+            return "    <LKState name=\"\(escape(name))\"><elements>\n\(elements)\n      </elements></LKState>"
+        }.joined(separator: "\n")
 
         let transitions = document.stateTransitions.isEmpty ? defaultStateTransitions() : document.stateTransitions
         let transitionXML = transitions.map { transition in
             let elements = transition.elements.map { element in
-                guard let spring = element.animation else { return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"/>" }
+                guard let spring = element.animation else {
+                    return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"/>"
+                }
                 var attrs = "type=\"\(escape(spring.type))\" damping=\"\(number(spring.damping))\" mass=\"\(number(spring.mass))\" stiffness=\"\(number(spring.stiffness))\" velocity=\"\(number(spring.initialVelocity))\""
                 if let duration = spring.duration { attrs += " duration=\"\(number(duration))\"" }
                 if let fillMode = spring.fillMode { attrs += " fillMode=\"\(escape(fillMode))\"" }
                 if let keyPath = spring.keyPath { attrs += " keyPath=\"\(escape(keyPath))\"" }
-                if let recalculates = spring.micaAutorecalculatesDuration { attrs += " mica_autorecalculatesDuration=\"\(recalculates ? "1" : "0")\"" }
+                if let recalculates = spring.micaAutorecalculatesDuration {
+                    attrs += " mica_autorecalculatesDuration=\"\(recalculates ? "1" : "0")\""
+                }
                 return "        <LKStateTransitionElement targetId=\"\(element.targetID.uuidString)\" key=\"\(escape(element.keyPath))\"><animation \(attrs)/></LKStateTransitionElement>"
-            }.joined(separator: "
-")
-            return "    <LKStateTransition fromState=\"\(escape(transition.fromState))\" toState=\"\(escape(transition.toState))\"><elements>
-\(elements)
-      </elements></LKStateTransition>"
-        }.joined(separator: "
-")
-        return "
-    <states>
-\(stateXML)
-    </states>
-    <stateTransitions>
-\(transitionXML)
-    </stateTransitions>"
+            }.joined(separator: "\n")
+            return "    <LKStateTransition fromState=\"\(escape(transition.fromState))\" toState=\"\(escape(transition.toState))\"><elements>\n\(elements)\n      </elements></LKStateTransition>"
+        }.joined(separator: "\n")
+
+        return "\n    <states>\n\(stateXML)\n    </states>\n    <stateTransitions>\n\(transitionXML)\n    </stateTransitions>"
     }
 
     private static func normalizedStateOverrides(_ document: AnimationDocument, names: [String]) -> [String: [StateOverride]] {
