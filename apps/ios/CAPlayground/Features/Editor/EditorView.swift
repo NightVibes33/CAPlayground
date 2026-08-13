@@ -738,7 +738,7 @@ private enum EditorTourTarget: Hashable {
 }
 
 private struct EditorTourFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [EditorTourTarget: CGRect] = [:]
+    static let defaultValue: [EditorTourTarget: CGRect] = [:]
     static func reduce(value: inout [EditorTourTarget: CGRect], nextValue: () -> [EditorTourTarget: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
