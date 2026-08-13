@@ -1,0 +1,43 @@
+name: iOS Compile Diagnostics
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/ios-compile-diagnostics.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      PROJECT: apps/ios/CAPlayground.xcodeproj
+      SCHEME: CAPlayground
+      DERIVED_DATA: ${{ github.workspace }}/build/DiagnosticDerivedData
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture simulator compiler diagnostics
+        shell: bash
+        run: |
+          set +e
+          rm -rf "$DERIVED_DATA"
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing 2>&1 | tee /tmp/xcodebuild.log
+          rc=${PIPESTATUS[0]}
+          grep -n -E '(^|[[:space:]])(error:|warning:)|:[0-9]+:[0-9]+: error:' /tmp/xcodebuild.log > /tmp/compiler-diagnostics.txt || true
+          echo "xcodebuild_exit=$rc" >> /tmp/compiler-diagnostics.txt
+          exit 0
+      - name: Upload compiler diagnostics
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-compiler-diagnostics
+          path: /tmp/compiler-diagnostics.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
