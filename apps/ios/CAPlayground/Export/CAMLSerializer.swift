@@ -249,16 +249,17 @@ enum CAMLSerializer {
         let stateXML = names.map { name in
             let overrides = normalized[name] ?? []
             let elements = overrides.map { value in
-                let encoded: (String, String) = switch value.value {
+                let encoded: (String, String)
+                switch value.value {
                 case .number(let valueNumber):
                     if value.keyPath == "position.x" || value.keyPath == "position.y" {
-                        ("integer", number(valueNumber.rounded()))
+                        encoded = ("integer", number(valueNumber.rounded()))
                     } else {
                         let converted = value.keyPath.hasPrefix("transform.rotation") ? valueNumber * .pi / 180 : valueNumber
-                        (converted.rounded() == converted ? "integer" : "real", number(converted))
+                        encoded = (converted.rounded() == converted ? "integer" : "real", number(converted))
                     }
                 case .string(let string):
-                    (
+                    encoded = (
                         value.keyPath == "backgroundColor" ? "CGColor" : "string",
                         value.keyPath == "backgroundColor" ? (color(string) ?? "1 1 1") : string
                     )

@@ -1021,6 +1021,79 @@ struct InspectorView: View {
     private func filterName(_ type: String) -> String { switch type { case "gaussianBlur": "Gaussian Blur"; case "colorContrast": "Contrast"; case "colorHueRotate": "Hue Rotate"; case "colorInvert": "Invert"; case "colorSaturate": "Saturate"; case "CISepiaTone": "Sepia"; default: type } }
     private func filterValueLabel(_ type: String) -> String { switch type { case "gaussianBlur": "Radius"; case "colorContrast", "colorSaturate": "Amount"; case "CISepiaTone": "Intensity"; case "colorHueRotate": "Angle"; default: "Value" } }
 
+    private func update(_ mutation: (inout LayerModel) -> Void) {
+        guard let selectedID else { return }
+        project.root.update(id: selectedID, mutation: mutation)
+    }
+
+    @MainActor private func importImage(_ url: URL) async {
+        do {
+            let imported = try await NativeImageAssetLoader.load(url)
+            let name = project.uniqueAssetName(imported.filename, defaultExtension: "png")
+            project.setAsset(imported.data, named: name)
+            update { $0.imageName = name }
+        } catch { }
+    }
+
+    @MainActor private func importEmitterCellImage(_ url: URL, targetID: UUID?) async {
+        do {
+            let imported = try await NativeImageAssetLoader.load(url)
+            let name = project.uniqueAssetName(imported.filename, defaultExtension: "png")
+            project.setAsset(imported.data, named: name)
+            update { layer in
+                if let targetID, let index = layer.emitterCells?.firstIndex(where: { $0.id == targetID }) {
+                    layer.emitterCells?[index].imageName = name
+                } else {
+                    var cells = layer.emitterCells ?? []
+                    var cell = EmitterCellModel()
+                    cell.imageName = name
+                    cells.append(cell)
+                    layer.emitterCells = cells
+                }
+            }
+        } catch { }
+    }
+
+    private func selectedImage(_ layer: LayerModel) -> UIImage? {
+        guard let name = layer.imageName, let data = project.assetData(named: name) else { return nil }
+        return UIImage(data: data)
+    }
+
+    private func resetImageBounds(_ layer: LayerModel) {
+        guard let image = selectedImage(layer) else { return }
+        let width = Double(image.cgImage?.width ?? Int(image.size.width * image.scale))
+        let height = Double(image.cgImage?.height ?? Int(image.size.height * image.scale))
+        updateSelectedSize(width: width, height: height)
+    }
+
+    private func updateSelectedSize(width: Double, height: Double) {
+        guard let selectedID else { return }
+        project.updateStateAware(
+            targetID: selectedID,
+            values: ["bounds.size.width": width, "bounds.size.height": height]
+        ) { $0.size = .init(width: width, height: height) }
+    }
+
+    private func applyCrop(to layer: LayerModel, crop: CGRect, maintainBounds: Bool) {
+        guard let image = selectedImage(layer), let source = image.cgImage else { return }
+        let sourceWidth = CGFloat(source.width)
+        let sourceHeight = CGFloat(source.height)
+        let pixelRect = CGRect(
+            x: crop.minX * sourceWidth,
+            y: crop.minY * sourceHeight,
+            width: crop.width * sourceWidth,
+            height: crop.height * sourceHeight
+        )
+        .integral
+        .intersection(CGRect(x: 0, y: 0, width: sourceWidth, height: sourceHeight))
+        guard pixelRect.width > 0, pixelRect.height > 0, let cropped = source.cropping(to: pixelRect) else { return }
+        let edited = UIImage(cgImage: cropped, scale: 1, orientation: .up)
+        storeEditedImage(edited, originalName: layer.imageName ?? "image.png", suffix: "cropped")
+        if !maintainBounds {
+            updateSelectedSize(width: Double(cropped.width), height: Double(cropped.height))
+        }
+    }
+
     private func applyBlur(to layer: LayerModel, amount: Double) {
         guard let image = selectedImage(layer), let cgImage = image.cgImage else { return }
         let source = CIImage(cgImage: cgImage), filter = CIFilter(name: "CIGaussianBlur")
