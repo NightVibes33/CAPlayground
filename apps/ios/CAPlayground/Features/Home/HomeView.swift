@@ -190,7 +190,7 @@ struct HomeView: View {
                     bentoRow([6, 7], height: 350, minimumWidth: 270)
                 }
                 VStack(spacing: 16) {
-                    ForEach(layers.indices, id: \\.self) { index in
+                    ForEach(layers.indices, id: \.self) { index in
                         layerCard(index, height: 300)
                     }
                 }
@@ -203,7 +203,7 @@ struct HomeView: View {
 
     private func bentoRow(_ indices: [Int], height: CGFloat, minimumWidth: CGFloat) -> some View {
         HStack(spacing: 16) {
-            ForEach(indices, id: \\.self) { index in
+            ForEach(indices, id: \.self) { index in
                 layerCard(index, height: height)
                     .frame(minWidth: minimumWidth, maxWidth: .infinity)
             }
@@ -219,7 +219,7 @@ struct HomeView: View {
                 LayerPreview(kind: entry.kind)
                 LinearGradient(colors: [.clear, .black.opacity(0.4), .black.opacity(0.9)], startPoint: .top, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(entry.kind == .basic ? "Basic Layer" : "\\(entry.kind.title) Layer")
+                    Text(entry.kind == .basic ? "Basic Layer" : "\(entry.kind.title) Layer")
                         .font(.system(size: 22, weight: .bold))
                     Text(entry.description)
                         .font(.system(size: 14))
