@@ -173,42 +173,73 @@ struct HomeView: View {
                     .frame(maxWidth: 680)
             }
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 16)], spacing: 16) {
-                ForEach(layers.indices, id: \.self) { index in
-                    let entry = layers[index]
-                    Button {
-                        selectedExample = wallpaperResponse?.wallpapers.first(where: { $0.id == entry.exampleID })
-                    } label: {
-                        ZStack(alignment: .bottomLeading) {
-                            LayerPreview(kind: entry.kind)
-                            LinearGradient(colors: [.clear, .black.opacity(0.4), .black.opacity(0.9)], startPoint: .top, endPoint: .bottom)
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(entry.kind == .basic ? "Basic Layer" : "\(entry.kind.title) Layer")
-                                    .font(.system(size: 22, weight: .bold))
-                                Text(entry.description)
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(Color(white: 0.82))
-                                    .lineLimit(horizontalSizeClass == .compact ? 2 : nil)
-                            }
-                            .padding(24)
-                        }
-                        .foregroundStyle(.white)
-                        .frame(height: horizontalSizeClass == .compact ? 300 : 400)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color(white: scheme == .dark ? 0.12 : 0.82), lineWidth: 1)
-                        }
+            ViewThatFits(in: .horizontal) {
+                VStack(spacing: 16) {
+                    bentoRow([0, 1, 2, 3], height: 400, minimumWidth: 294)
+                    bentoRow([4, 5, 6, 7], height: 400, minimumWidth: 294)
+                }
+                VStack(spacing: 16) {
+                    bentoRow([0, 1, 2], height: 400, minimumWidth: 270)
+                    bentoRow([3, 4, 5], height: 400, minimumWidth: 270)
+                    bentoRow([6, 7], height: 400, minimumWidth: 410)
+                }
+                VStack(spacing: 16) {
+                    bentoRow([0, 1], height: 350, minimumWidth: 270)
+                    bentoRow([2, 3], height: 350, minimumWidth: 270)
+                    bentoRow([4, 5], height: 350, minimumWidth: 270)
+                    bentoRow([6, 7], height: 350, minimumWidth: 270)
+                }
+                VStack(spacing: 16) {
+                    ForEach(layers.indices, id: \\.self) { index in
+                        layerCard(index, height: 300)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(wallpaperResponse == nil)
-                    .accessibilityHint("Opens the example wallpaper used by the website")
                 }
             }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 96)
         .frame(maxWidth: 1400)
+    }
+
+    private func bentoRow(_ indices: [Int], height: CGFloat, minimumWidth: CGFloat) -> some View {
+        HStack(spacing: 16) {
+            ForEach(indices, id: \\.self) { index in
+                layerCard(index, height: height)
+                    .frame(minWidth: minimumWidth, maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func layerCard(_ index: Int, height: CGFloat) -> some View {
+        let entry = layers[index]
+        return Button {
+            selectedExample = wallpaperResponse?.wallpapers.first(where: { $0.id == entry.exampleID })
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                LayerPreview(kind: entry.kind)
+                LinearGradient(colors: [.clear, .black.opacity(0.4), .black.opacity(0.9)], startPoint: .top, endPoint: .bottom)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(entry.kind == .basic ? "Basic Layer" : "\\(entry.kind.title) Layer")
+                        .font(.system(size: 22, weight: .bold))
+                    Text(entry.description)
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(white: 0.82))
+                        .lineLimit(horizontalSizeClass == .compact ? 2 : nil)
+                }
+                .padding(24)
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color(white: scheme == .dark ? 0.12 : 0.82), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(wallpaperResponse == nil)
+        .accessibilityHint("Opens the example wallpaper used by the website")
     }
 
     private var growingSection: some View {
