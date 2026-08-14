@@ -1,0 +1,155 @@
+import SwiftUI
+
+struct PrivacyPolicyView: View {
+    var body: some View {
+        LegalDocumentView(kind: .privacy, title: "Privacy Policy", updated: "20th October 2025", sections: privacySections)
+    }
+}
+
+struct TermsOfServiceView: View {
+    var body: some View {
+        LegalDocumentView(kind: .terms, title: "Terms of Service", updated: "9th December 2025", sections: termsSections)
+    }
+}
+
+private struct LegalSection: Identifiable {
+    let id = UUID()
+    let title: String
+    let body: String
+}
+
+private enum LegalKind {
+    case privacy
+    case terms
+}
+
+private struct LegalDocumentView: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("appearance") private var appearance = "system"
+
+    let kind: LegalKind
+    let title: String
+    let updated: String
+    let sections: [LegalSection]
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            LinearGradient(
+                colors: [CATheme.muted(scheme).opacity(0.45), CATheme.background(scheme)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 28) {
+                    legalToolbar
+                    VStack(alignment: .leading, spacing: 28) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(title)
+                                .font(.system(size: sizeClass == .compact ? 36 : 48, weight: .bold))
+                            Text("Last Updated: \(updated)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ForEach(sections) { section in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(section.title).font(.title2.bold())
+                                if section.title.hasSuffix("Contact") {
+                                    contactSection
+                                } else {
+                                    Text(attributedBody(section))
+                                        .textSelection(.enabled)
+                                        .lineSpacing(5)
+                                }
+                            }
+                        }
+                    }
+                    .padding(sizeClass == .compact ? 20 : 40)
+                    .frame(maxWidth: 768, alignment: .leading)
+                    .background(CATheme.background(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(CATheme.border(scheme), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
+                }
+                .frame(maxWidth: 896)
+                .padding(.horizontal, sizeClass == .compact ? 16 : 24)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var legalToolbar: some View {
+        HStack {
+            Button { dismiss() } label: { Label("Back", systemImage: "arrow.left") }
+                .buttonStyle(CAWebButtonStyle(variant: .ghost))
+            Spacer()
+            Button { appearance = scheme == .dark ? "light" : "dark" } label: {
+                Image(systemName: scheme == .dark ? "sun.max" : "moon")
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(CAWebButtonStyle(variant: .outline, height: 36))
+            .accessibilityLabel("Toggle theme")
+        }
+        .frame(maxWidth: 768)
+    }
+
+    private func attributedBody(_ section: LegalSection) -> AttributedString {
+        var body = section.body
+        if kind == .privacy && section.title == "4. Third Parties" {
+            body = body.replacingOccurrences(
+                of: "Google's Privacy Policy",
+                with: "[Google's Privacy Policy](https://policies.google.com/privacy)"
+            )
+        }
+        return (try? AttributedString(markdown: body)) ?? AttributedString(body)
+    }
+
+    @ViewBuilder
+    private var contactSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Questions? Contact us at").lineSpacing(5)
+            Link("support@enkei64.xyz", destination: URL(string: "mailto:support@enkei64.xyz")!)
+            if kind == .privacy {
+                NavigationLink("Terms of Service") { TermsOfServiceView() }
+            } else {
+                NavigationLink("Privacy Policy") { PrivacyPolicyView() }
+            }
+        }
+        .font(.body)
+    }
+}
+
+private let privacySections = [
+    LegalSection(title: "CAPlayground Privacy Policy", body: "This Privacy Policy explains how CAPlayground (we, us) collects, uses, and protects your information. It applies to your use of the CAPlayground website and application (the Service)."),
+    LegalSection(title: "1. Information We Collect", body: "NO Local Projects: By default, your projects are stored locally on your device (using browser IndexedDB or OPFS). We do not receive your local projects unless you explicitly upload or share them.\n\nCloud Projects (Optional): You can optionally use Cloud Projects by signing in to Google Drive. When you do this, your project files are stored in YOUR Google Drive account, not on CAPlayground servers. We do not receive, store, or have access to your Cloud Projects. All data is transmitted directly between your browser and Google Drive.\n\nAccount Information: If you create an account via Supabase using email/password or Google OAuth, we process your email, necessary authentication identifiers (e.g., provider and user ID), and optional profile information required to operate the Service.\n\nDevice & Usage: Basic technical information such as device/browser type and interactions needed to operate the Service. We do not run third-party analytics unless stated here.\n\nCookies & Local Storage: We use necessary cookies/localStorage for session, preferences, and product features (e.g., first-time Terms acceptance: caplayground-tos-accepted). If you sign in to Google Drive, we store authentication tokens in secure, httpOnly cookies (google_drive_access_token, google_drive_refresh_token, google_drive_token_expiry) to maintain your Drive session and authenticate API requests on your behalf."),
+    LegalSection(title: "2. How We Use Information", body: "Provide and improve the Service and its features.\n\nAuthenticate users and secure accounts.\n\nPrevent abuse and ensure the reliability of the Service.\n\nCommunicate important updates related to your account or the Service."),
+    LegalSection(title: "3. Analytics", body: "We use privacy conscious analytics to understand usage and improve CAPlayground. This includes:\n\nPage Views: Page URL, title, referrer, timestamp, and a session ID.\n\nSessions: Session duration, start/end time, number of pages visited, and basic bounce detection.\n\nPerformance: Page load time, DOM content loaded, first paint/first contentful paint, and resource timing metrics.\n\nAggregate Counters: We also keep aggregate-only counts for certain product events (projects created). These counters are stored without user identifiers and used for product planning. The contents in your projects are not collected.\n\nWe do not use analytics for advertising, and we do not intentionally collect sensitive identifiers (such as precise location or device fingerprinting data) for analytics."),
+    LegalSection(title: "4. Third Parties", body: "We use Supabase for authentication and backend infrastructure. Supabase may process data necessary to provide those services and may maintain operational logs (e.g., auth events). We also use PostHog for privacy focused analytics as described above. PostHog data is proxied through our own domain to improve reliability. Refer to those providers' documentation/policies for more details.\n\nGoogle Drive (Optional): If you choose to use Cloud Projects, we integrate with Google Drive to store your project files. Your project files are stored in YOUR Google Drive account in a folder named \"CAPlayground\". We access only files created by CAPlayground. Your use of Google Drive is subject to Google's Privacy Policy. You can revoke CAPlayground's access to your Drive at any time through your Google account settings."),
+    LegalSection(title: "5. Data Retention", body: "Local projects remain on your device until you remove them.\n\nCloud Projects remain in your Google Drive until you delete them. Deleting your CAPlayground account does NOT automatically delete your Cloud Projects from Google Drive. You must manually delete them using the \"Delete All\" feature in the dashboard or directly from Google Drive.\n\nAccount data is retained while your account is active. If you delete your account, we delete associated account data except where retention is required by law.\n\nGoogle Drive authentication cookies are cleared when you sign out from Google Drive or when they expire."),
+    LegalSection(title: "6. Your Rights", body: "Depending on your location, you may have rights to access, correct, or delete your data. We are planning an account deletion endpoint in the app. You can also contact us to exercise your rights."),
+    LegalSection(title: "7. Children’s Privacy", body: "The Service is not intended for children under the age specified in our Terms of Service. If you believe a child has provided us personal data, contact us and we will take appropriate steps."),
+    LegalSection(title: "8. International Transfers", body: "Data may be processed in regions where our providers operate. We take steps to ensure appropriate safeguards consistent with applicable laws."),
+    LegalSection(title: "9. Changes to This Policy", body: "We may update this Privacy Policy from time to time. We will update the \"Last Updated\" date above and, when appropriate, provide additional notice."),
+    LegalSection(title: "10. Contact", body: "Questions? Contact us at support@enkei64.xyz.\n\nAlso see our Terms of Service.")
+]
+
+private let termsSections = [
+    LegalSection(title: "CAPlayground Terms", body: "These Terms of Service govern your access to and use of CAPlayground. By using the Service, you agree to these Terms."),
+    LegalSection(title: "1. Definitions", body: "Service: The CAPlayground application and website.\n\nLocal Projects: Projects created and stored locally in your browser/device.\n\nCloud Projects: Projects created and stored in your Google account's Google Drive.\n\nAccount: A Supabase-backed account enabling authentication and account features.\n\nUser Content: Content you create or upload while using the Service."),
+    LegalSection(title: "2. Scope & Applicability", body: "Some sections apply to everyone who uses the Service (General Terms). Other sections apply only to users who create or use an Account (Account Terms)."),
+    LegalSection(title: "3. General Terms (apply to all users)", body: "Acceptable Use: Do not misuse the Service or interfere with others’ use. Do not attempt to access non-public areas or disrupt the Service.\n\nIntellectual Property: We retain all rights to the Service. You retain rights to your User Content.\n\nContent Sharing & Attribution: If you share wallpapers or content created with CAPlayground on social media platforms (including but not limited to TikTok, Instagram, YouTube, Twitter/X), you must provide clear attribution to CAPlayground. Acceptable attribution includes: (a) linking to caplayground.vercel.app in your post description, bio, or pinned comment, or (b) visibly crediting \"CAPlayground\" in your content. You may not mislead viewers about the source of the wallpapers or direct them to fraudulent instructions, scam websites, or deceptive practices instead of proper attribution.\n\nProhibited Conduct: You may not use content created with CAPlayground to: (a) deceive or defraud users, (b) promote scams or misleading instructions, (c) falsely claim creation of the Service or its features, or (d) engage in any activity that damages CAPlayground's reputation or misleads the public about the Service.\n\nProjects: By default, projects are stored locally on your device (using browser IndexedDB or OPFS). We do not receive your Local Projects. You can optionally use Cloud Projects, which require signing in to your CAPlayground account and then connecting your Google Drive. This enables secure cloud storage and syncing of your projects across devices. CAPlayground does not receive or store your Cloud Projects; access and storage are managed according to Google Drive's policies.\n\nCloud Projects: Cloud storage via Google Drive allows you to sync your projects across devices. We provide no guarantees of data availability or reliability for Cloud Projects. You are responsible for maintaining backups of important projects. You must comply with Google's Terms of Service when using Cloud Projects.\n\nGoogle Drive Integration: When you sign in to Google Drive, you authorize CAPlayground to access files created by CAPlayground in your Drive. We use browser cookies to maintain your Drive session. You can revoke this access at any time through your Google account settings or by signing out from Google Drive in the dashboard.\n\nNo Warranty: The Service is provided “as is” and “as available.” We disclaim warranties to the extent permitted by law.\n\nLimitation of Liability: To the extent permitted by law, we are not liable for indirect, incidental, or consequential damages.\n\nChanges to the Service: We may change or discontinue features at any time."),
+    LegalSection(title: "4. Account Terms (apply if you sign in)", body: "Eligibility: You must be at least 13 years old to use the Service, or the minimum age of digital consent in your country.\n\nAccount Information: Accounts are provided via Supabase. We may collect and process your email, username (if set), and sign-in activity for security and account operation.\n\nSecurity: Keep your credentials secure. You are responsible for activity under your account.\n\nTermination: You may delete your account at any time. We may suspend or terminate accounts that violate these Terms. Note: Deleting your CAPlayground account does not automatically delete your Cloud Projects from Google Drive. You must manually delete them from Drive or use the \"Delete All\" feature in the dashboard before deleting your account."),
+    LegalSection(title: "5. Privacy & Data", body: "Local Processing: Local Projects remain on your device unless you explicitly upload/share them.\n\nAccount Data: If you create an Account, we process minimal data needed for authentication and profile features (email, optional username) using Supabase.\n\nOperational Logs: Supabase, as our backend provider, maintains operational logs (e.g., auth events, edge/network, API, and database logs) to operate and secure the platform. See Supabase docs for details.\n\nAggregate-only Analytics: We record aggregate counts of certain in-product events (e.g., when a project is created) to understand usage. These counters do not include user identifiers and are not used for advertising.\n\nAnalytics (PostHog): We use a privacy focused analytics tool to measure page views (URL, title, referrer, timestamp, session ID), sessions (duration, start/end times, page count, basic bounce), and performance metrics (page load, DOM content loaded, first paint/first contentful paint, resource timing). Analytics data is proxied through our own domain.\n\nCloud Projects Data: When you use Cloud Projects, your project files are stored in YOUR Google Drive account, not on CAPlayground servers. We do not receive, store, or have access to your Cloud Projects. All data is transmitted directly between your browser and Google Drive.\n\nGoogle Drive Cookies: When you sign in to Google Drive, we store authentication tokens in browser cookies (httpOnly, secure) to maintain your session. These cookies are used solely to authenticate API requests to Google Drive on your behalf."),
+    LegalSection(title: "6. Third-Party Services", body: "We use Supabase for authentication and backend infrastructure. Your use of those features may be subject to Supabase’s policies.\n\nIf you use Cloud Projects, we integrate with Google Drive to store your project files in YOUR Google Drive account. Your use of Google Drive is subject to Google's Terms of Service and Privacy Policy. CAPlayground accesses only files it creates in a \"CAPlayground\" folder in your Drive. You are responsible for your Google Drive storage limits and compliance with Google's terms."),
+    LegalSection(title: "7. Enforcement & Violations", body: "We reserve the right to investigate violations of these Terms, including misuse of content created with CAPlayground. If we determine that you have violated the Content Sharing & Attribution or Prohibited Conduct provisions, we may: (a) suspend or terminate your account, (b) request removal of infringing content from social media platforms, (c) pursue legal remedies where applicable, or (d) publicly identify accounts engaged in fraudulent or deceptive practices. We may also report scams and fraudulent activity to relevant platforms and authorities."),
+    LegalSection(title: "8. Changes to These Terms", body: "We may update these Terms, update the Last Updated date, and communicate material changes reasonably."),
+    LegalSection(title: "9. Contact", body: "Questions? Contact us at support@enkei64.xyz.\n\nAlso see our Privacy Policy.")
+]
