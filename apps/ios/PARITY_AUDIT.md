@@ -1,92 +1,102 @@
 # CAPlayground Website → Native iOS Parity Audit
 
-This file is an engineering checklist for the native conversion. A surface is only marked **verified** after its website source, native source, behavior/defaults/disabled states, persistence/import/export semantics, and iOS CI build have been checked.
+This audit treats the website source as the specification. A checked item means the corresponding native implementation was compared against the website for route/control coverage, important defaults/disabled states, and data/import/export behavior, and the consolidated native tree passed iOS compilation/testing. It does **not** mean an automated screenshot pixel-diff has been completed.
+
+## Validation baseline
+
+- Consolidated staging validation: GitHub Actions run **#205**.
+- Website/native companion API type-check: **passed**.
+- iOS Simulator build-for-testing: **passed**.
+- Native XCTest suite: **passed**.
+- Unsigned arm64 iPhoneOS archive: **passed**.
+- IPA package verification and artifact upload: **passed**.
+- Auth provider redirects return directly to `caplayground://...`; provider login/linking does not depend on a CAPlayground web auth page.
+- Local projects/assets are available without Supabase/Drive network access.
 
 ## Routes
 
-- [ ] `/` Home
-- [ ] `/projects` Projects/import/cloud actions
-- [ ] `/editor/[id]` Editor shell and all editor components
-- [ ] `/wallpapers` Gallery and submission
-- [ ] `/tendies-check` Tendies checker
-- [ ] `/signin` Sign in/sign up/OAuth
-- [ ] `/forgot-password` Forgot password
-- [ ] `/reset-password` Reset password
-- [ ] `/auth/success` Auth callback/success behavior
-- [ ] `/account` Account/provider linking/actions
-- [ ] `/dashboard` Dashboard/submissions/cloud project actions
-- [ ] `/contributors` Contributors
-- [ ] `/roadmap` Roadmap
-- [ ] `/privacy` Privacy
-- [ ] `/tos` Terms
-- [x] `/docs` is an external redirect on the website; do not invent a native Docs page.
+- [x] `/` Home — hero, navigation behavior, live GitHub metrics, responsive bento composition, website example wallpaper actions, growth metrics, Most Downloaded wallpaper, footer.
+- [x] `/projects` — search/filter/sort/grid/list, creation/device bounds/gyro, import modes, link import, select/bulk delete, Drive sync/download/delete, native `caplayground://projects` query-intent equivalents.
+- [x] `/editor/[id]` — native Editor shell and editor subsystems.
+- [x] `/wallpapers` — gallery/search/sort/stats/details/download/Pocket Poster/Open in Editor/copy link/submission/footer and native `caplayground://wallpapers` intents.
+- [x] `/tendies-check` — `.tendies`-only import/drop, CA/remix inspection, file/type/tree/assets/video results.
+- [x] `/signin` — email/password, Google/GitHub/Discord, theme/legal controls.
+- [x] `/forgot-password` — native reset-link flow.
+- [x] `/reset-password` — native two-field reset flow with 8-character minimum.
+- [x] `/auth/success` — session verification, username completion, provider/email summary, Continue/Create Project/Dashboard/Sign out.
+- [x] `/account` — account fields, OAuth-managed restrictions, provider link/unlink, password/account actions.
+- [x] `/dashboard` — submissions/status sync, cloud projects, Drive actions, account options.
+- [x] `/contributors` — contributor API/stats/cards/CTA/nav/footer.
+- [x] `/roadmap` — month controls/cards/statuses/nav/footer.
+- [x] `/privacy` — standalone Back/theme/paper shell, policy text, support/cross-policy/Google Privacy links.
+- [x] `/tos` — standalone Back/theme/paper shell, terms text, support/cross-policy links.
+- [x] `/docs` — website is an external documentation redirect; native intentionally links to the same documentation instead of inventing a screen.
 
-## Editor
+## Shared website shell
 
-- [ ] Menu bar
-- [ ] Mobile bottom bar
-- [ ] Layers panel/context menu/reorder/multi-select/visibility
-- [ ] States panel/View All/appearance split — export counterpart filling and website default transitions implemented; consolidated CI pending.
-- [ ] Settings panel/shortcuts/appearance/guides/onboarding reset
-- [ ] Onboarding target highlighting and placement — actual Layers/States/Canvas/Inspector/Settings frames, website placements and navigation implemented; consolidated CI pending.
-- [ ] Canvas preview/pan/zoom/selection/handles/guides
-- [ ] Device preview/clock/lock screen — website state machine/timings, Light/Dark split, depth effect, status/home chrome, gestures, and sleep timeline behavior implemented; consolidated CI pending.
-- [ ] Gyro controls
-- [ ] Timeline ruler/playhead/tree/zoom/repeat/autoreverse/resize/snapping — website component and hardware Shift 0.5s resize snapping implemented; consolidated CI pending.
-- [ ] Geometry inspector — website animation locks, align target/actions, percentage resize controls, scale control, X/Y/Z rotation controls, anchor-point modes, state restrictions, and perspective behavior implemented; Simulator CI passed on run #141; consolidated CI pending.
-- [ ] Content inspector — website gradient exclusion, state-aware background color, Base-State-only background opacity/border controls, percentage input, and cross-link behavior implemented; Simulator CI passed on run #147; consolidated CI pending.
-- [ ] Text inspector — website state restrictions, center fallback, four alignment controls, and wrap helper copy implemented; Simulator CI passed on run #147; consolidated CI pending.
-- [ ] Gradient inspector — website type, 0–100% endpoint slider/input controls, color opacity display, add/remove controls implemented; Simulator CI passed on run #147; consolidated CI pending.
-- [ ] Image inspector — replacement/reset/state restrictions plus website draggable crop rectangle/four corner handles/5% minimum/maintain-bounds behavior implemented; consolidated CI pending.
-- [ ] Video inspector — read-only Frames/FPS/Duration, sync-aware Calculation/Auto Reverse controls, frame child generation, Locked/Unlock/Sleep Beginning/End defaults, and z-position state overrides implemented; Simulator CI passed on run #151; consolidated CI pending.
-- [ ] Emitter inspector
-- [ ] Replicator inspector — website field layout, 1–100 count, translation/rotation helper copy, and non-negative delay behavior implemented; consolidated CI pending.
-- [ ] Filters inspector — website unique filter names persisted through CAML, parameterless Invert semantics, checkbox/remove controls, numeric fields and Hue knob implemented; consolidated CI pending.
-- [ ] Compositing inspector — website percentage opacity input, Content cross-link, corner radius and Base-State-only clip behavior implemented; Simulator CI passed on run #147; consolidated CI pending.
-- [x] Animations inspector/keyframes/bulk input/export — website control set implemented and verified by normal iOS CI run #110.
-- [ ] Gyro inspector — website dictionary count/add/remove/title/axis/fixed-key-path/map controls plus root wallpaper style/parallax/property-group import/export implemented; consolidated CI pending.
-- [x] Blur editor — website 0–50 px live preview, 1 px step, Cancel and Apply Blur behavior matched.
-- [ ] Export dialog and success actions
-- [ ] Video/GIF conversion
+- [x] Responsive website navigation and top/scrolled presentation.
+- [x] Desktop signed-in account menu: Dashboard + Sign out.
+- [x] Mobile signed-in Account/Dashboard behavior.
+- [x] Sign-in vs Projects CTA behavior.
+- [x] Theme toggle.
+- [x] Website footer CTA/resources/community/legal links where the website uses the shared footer.
 
-## Import/export and persistence
+## Editor shell and interaction
 
-- [ ] `.ca` archive/folder/ZIP import semantics
-- [ ] `.tendies` import semantics
-- [ ] `.tendies` direct URL import
-- [ ] image types: PNG/JPEG/JPG/WebP/BMP/SVG and GIF routing
-- [ ] video/GIF frame conversion and timing
-- [ ] `.ca` export structure/assets/license
-- [ ] `.tendies` export/template/assets/license
-- [ ] local offline project persistence and scoped assets
-- [ ] Google Drive sync/conflict/bulk delete/progress flows
-- [ ] Files/Share Sheet/Open In document registration
+- [x] Menu bar, active CA, Background visibility, panel toggles, save state/manual save, Settings, Export.
+- [x] Mobile bottom bar, Canvas/Panels, CA selector, Add Layer and Base/Locked/Unlock/Sleep controls.
+- [x] Layers tree/root, collapse, visibility, selection/multiselect, rename, duplicate, delete, nested drag/drop and reorder/front/forward/backward/back.
+- [x] Canvas preview, selection, pan/zoom, resize/rotation, state-aware editing and snapping.
+- [x] States/View All/appearance split and transition export behavior.
+- [x] Settings, density, snapping, preview settings, shortcut list, panel widths and onboarding reset.
+- [x] Target-highlight onboarding for Layers/States/Canvas/Inspector/Settings.
+- [x] Lock-screen/device preview state machine, Light/Dark split, depth ordering, side-button/tap/swipe behavior and website transition timings.
+- [x] Timeline ruler/playhead/tree/collapse/zoom/repeat/autoreverse/speed-aware bars/duration resize and Shift 0.5s snapping.
+- [x] Hardware keyboard shortcut surface.
 
-## Current strict fixes already applied in this audit
+## Inspector / layer controls
 
-- `.tendies` checker picker and drag/drop now accept `.tendies` only, matching the website.
-- Native-only JSON shortcut removed from `.ca` import.
-- Website-style import type and direct-link controls applied.
-- Mobile Add Layer hides Replicator/Liquid Glass like the website.
-- Mobile state menu is Base/Locked/Unlock/Sleep like the website.
-- Settings shortcut wording aligned with website.
-- GIF video extraction uses the website's fixed 15 fps timing semantics.
-- `.ca` and `.tendies` UTTypes/document types registered for native opening.
-- Opening documents in place enabled.
-- Full Layers panel restored from the last green implementation before applying mobile-only deltas.
-- Reset-password UI and the underlying auth updater now enforce the website's 8-character minimum.
-- OAuth success now includes username completion, provider/email account summary, Continue, Create a Project, Account Dashboard, and Sign out actions.
-- Dashboard submission status sync uses the website `/api/wallpapers/sync` flow; submission preview is real looping MP4/MOV media; bulk cloud actions and website messaging are aligned.
-- Gallery submission now opens the same submission surface for signed-in and signed-out users; signed-out state shows the website's Sign In Required content.
-- Animation inspector mirrors website-supported key paths, duplicate filtering, gradient-only `colors`, empty new animations, current-value keyframes, custom key times, duration/loop/repeat/advanced controls, typed value editors, Bulk text plus `.txt/.csv` import, value export, and removal; run #110 passed simulator build, device archive, package verification, and IPA upload.
-- Timeline mirrors website ruler/tree/playhead/zoom/label-resize/repeat/autoreverse/speed-aware bars/duration-resize behavior and hardware Shift 0.5s snapping.
-- Device Preview mirrors website Locked/Unlock/Sleep interactions, 50% swipe threshold, 200/300/500 ms transition timings, side-button/tap wake behavior, Light/Dark appearance split, clock depth ordering, live clock/date/status chrome, unlocked dock, and sleep timeline pause.
-- Geometry inspector mirrors the website's conditional animation locks, Canvas/Parent alignment controls, optional percentage resize controls, 0–400% scale control, X/Y/Z rotation controls, 3×3/custom anchor controls, state-transition restrictions, and perspective control.
-- Compositing, Content, Text, and Gradient now use the website's controls/defaults and state-transition restrictions instead of native-only shortcuts.
-- Video state-sync now generates native image frame children and z-position overrides equivalent to the website, while preserving stable UUID targets through CAML import/export.
-- Gyro wallpaper export now emits root-level `wallpaperBackgroundAssetNames`, `wallpaperFloatingAssetNames`, `wallpaperParallaxGroups`, and `wallpaperPropertyGroups`; import restores property-group overrides and redistributes parallax dictionaries to their target layers by `layerName`.
-- Non-wallpaper legacy nested gyro dictionaries remain round-trippable without changing website-correct wallpaper root serialization.
-- Normal CA state export now fills missing counterpart overrides from Base State and emits the website's six default Locked/Unlock/Sleep transitions when no explicit transitions exist.
-- Filter names now round-trip through CAML and parameterless `colorInvert` imports as value 0, matching the website.
-- Native CI now executes the XCTest suite on a dynamically selected available iPhone Simulator before starting the unsigned arm64 archive.
-- Added round-trip tests for Video state-sync, Gyro wallpaper parallax/property groups, state counterpart/default-transition export, filter names/Invert, plus retained legacy advanced-control coverage.
+- [x] Geometry — animation locks, Canvas/Parent alignment, percentage resize, scale, XYZ rotation, anchors, state restrictions, perspective.
+- [x] Compositing — blend modes, opacity, Content cross-link, corner radius, Base-State clipping restrictions.
+- [x] Content — gradient exclusions, background/border behavior and non-Base-state restrictions.
+- [x] Text — text/font controls, alignment/wrapping and state restrictions.
+- [x] Gradient — type, endpoint percentage controls, colors/opacities, add/remove.
+- [x] Image — preview/replace/reset bounds, draggable crop/corner handles/5% minimum/maintain-bounds, destructive Blur.
+- [x] Video — conversion settings, read-only metadata, state-sync children/overrides and sync-aware controls.
+- [x] Emitter — layer speed/state restrictions, image-backed cells, advanced cell properties/color/RGB modulation.
+- [x] Replicator — instance count/transform/delay constraints and helper copy.
+- [x] Filters — six website filters/defaults, unique names, parameterless Invert, numeric/Hue editors, enable/remove.
+- [x] Animations — supported key paths, duplicate filtering, gradient colors, typed keyframes, current-value Add, custom key times, repeat/autoreverse, Bulk text + `.txt/.csv`, export/remove.
+- [x] Gyro — website dictionary controls plus root wallpaper parallax/property-group serialization/import reconstruction.
+
+## Import/export, files and persistence
+
+- [x] `.ca` archive/package/ZIP import behavior.
+- [x] `.tendies` import behavior.
+- [x] Direct `.tendies` URL import with name/creator metadata.
+- [x] `.ca` and `.tendies` iOS UTType/document registration, Files/Share Sheet/Open In and opening in place.
+- [x] Image types: PNG/JPEG/JPG/WebP/BMP/SVG; GIF routes through video conversion.
+- [x] Video/GIF conversion, website fixed 15-fps GIF semantics, 15/30/60 fps selection and frame asset generation.
+- [x] Animation Bulk `.txt`/`.csv` input.
+- [x] `.ca` export ZIP structure, CAML/assets/license selection.
+- [x] `.tendies` export/template/assets/license selection.
+- [x] Per-document asset scoping and same-name asset collision round-trip.
+- [x] States/transitions, typed animations, gradients, filters, emitter properties and angle unit conversion round-trip.
+- [x] Wallpaper root `wallpaperBackgroundAssetNames`, `wallpaperFloatingAssetNames`, `wallpaperParallaxGroups`, `wallpaperPropertyGroups` serialization/import.
+- [x] Local atomic project persistence/offline editing.
+- [x] Google Drive list/connect/sync/update/download/delete/bulk-delete/disconnect behavior.
+
+## Native tests / regression coverage
+
+- [x] Archive/CAML model round-trip coverage.
+- [x] Same-named per-document asset collision preservation.
+- [x] Advanced emitter fields and degree↔radian behavior.
+- [x] Video state-sync children/override round-trip.
+- [x] Gyro wallpaper parallax/property groups and legacy non-wallpaper gyro round-trip.
+- [x] State counterpart filling and six website default transitions.
+- [x] Filter names and parameterless Invert semantics.
+- [x] CI executes XCTest on an available iPhone Simulator before device archiving.
+
+## Remaining verification caveat
+
+The conversion has been source-audited and behavior/serialization tested to the point required for the consolidated port. The remaining thing **not** claimed by this audit is automated screenshot-by-screenshot pixel-diff verification against every responsive website breakpoint. Any future visual discrepancy found from device/simulator screenshots should be treated as a parity bug, not as permission to redesign the website UI.

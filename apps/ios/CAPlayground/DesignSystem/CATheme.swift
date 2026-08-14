@@ -58,38 +58,106 @@ struct CAWebsiteNavigation: View {
     @Environment(AuthStore.self) private var auth
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("appearance") private var appearance = "system"
+
+    var isScrolled: Bool = true
+
     var body: some View {
         HStack(spacing: 12) {
-            Image(scheme == .dark ? "icon-dark" : "icon-light").resizable().frame(width: 32, height: 32).clipShape(RoundedRectangle(cornerRadius: 8))
-            Text("CAPlayground").font(.custom("Helvetica Neue", size: 20).weight(.bold))
+            Button { dismiss() } label: {
+                HStack(spacing: 10) {
+                    Image(scheme == .dark ? "icon-dark" : "icon-light")
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    Text("CAPlayground")
+                        .font(.custom("Helvetica Neue", size: 20).weight(.bold))
+                        .foregroundStyle(CATheme.foreground(scheme))
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("CAPlayground Home")
+
             Spacer()
+
             if sizeClass == .compact {
                 Menu {
                     Link("Docs", destination: URL(string: "https://docs.enkei64.xyz")!)
                     NavigationLink("Contributors") { ContributorsView() }
                     NavigationLink("Roadmap") { RoadmapView() }
                     NavigationLink("Wallpapers") { WallpapersView() }
-                    if auth.isSignedIn { NavigationLink("Account") { AccountView() } } else { NavigationLink("Sign In") { SignInView() } }
+                    if auth.isSignedIn {
+                        NavigationLink("Account") { DashboardView() }
+                        Button("Sign out", role: .destructive) { Task { await auth.signOut() } }
+                    } else {
+                        NavigationLink("Sign In") { SignInView() }
+                    }
                     NavigationLink("Projects") { ProjectsView() }
-                    Button(scheme == .dark ? "Light Mode" : "Dark Mode", systemImage: scheme == .dark ? "sun.max" : "moon") { appearance = scheme == .dark ? "light" : "dark" }
-                } label: { Image(systemName: "line.3.horizontal").frame(width: 40, height: 40) }
+                    Button(scheme == .dark ? "Light Mode" : "Dark Mode", systemImage: scheme == .dark ? "sun.max" : "moon") {
+                        appearance = scheme == .dark ? "light" : "dark"
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal").frame(width: 40, height: 40)
+                }
             } else {
                 HStack(spacing: 24) {
                     Link("Docs", destination: URL(string: "https://docs.enkei64.xyz")!)
                     NavigationLink("Contributors") { ContributorsView() }
                     NavigationLink("Roadmap") { RoadmapView() }
                     NavigationLink("Wallpapers") { WallpapersView() }
-                }.font(.system(size: 16))
-                if auth.isSignedIn { NavigationLink { AccountView() } label: { Image(systemName: "person").frame(width: 36, height: 36) } }
-                else { NavigationLink("Sign In") { SignInView() }.buttonStyle(CAWebButtonStyle(variant: .outline)) }
-                NavigationLink { ProjectsView() } label: { Label("Projects", systemImage: "arrow.right") }.buttonStyle(CAWebButtonStyle(variant: .accent))
-                Button { appearance = scheme == .dark ? "light" : "dark" } label: { Image(systemName: scheme == .dark ? "sun.max" : "moon").frame(width: 36, height: 36) }.buttonStyle(.plain)
+                }
+                .font(.system(size: 16))
+
+                if auth.isSignedIn {
+                    Menu {
+                        NavigationLink("Dashboard") { DashboardView() }
+                        Divider()
+                        Button("Sign out", role: .destructive) { Task { await auth.signOut() } }
+                    } label: {
+                        Image(systemName: "person")
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Account menu")
+                } else {
+                    NavigationLink("Sign In") { SignInView() }
+                        .buttonStyle(CAWebButtonStyle(variant: .outline))
+                }
+
+                NavigationLink { ProjectsView() } label: {
+                    Label("Projects", systemImage: "arrow.right")
+                }
+                .buttonStyle(CAWebButtonStyle(variant: .accent))
+
+                Button { appearance = scheme == .dark ? "light" : "dark" } label: {
+                    Image(systemName: scheme == .dark ? "sun.max" : "moon").frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 20).frame(height: 56)
-        .background(CATheme.background(scheme).opacity(0.8), in: RoundedRectangle(cornerRadius: 16)).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .overlay { RoundedRectangle(cornerRadius: 16).stroke(CATheme.border(scheme), lineWidth: 1) }.shadow(color: .black.opacity(0.10), radius: 10, y: 4)
+        .padding(.horizontal, isScrolled ? 20 : 24)
+        .frame(height: isScrolled ? 56 : 64)
+        .background {
+            if isScrolled {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(CATheme.background(scheme).opacity(0.80))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                Rectangle()
+                    .fill(CATheme.background(scheme).opacity(0.80))
+                    .background(.ultraThinMaterial)
+            }
+        }
+        .overlay {
+            if isScrolled {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(CATheme.border(scheme), lineWidth: 1)
+            }
+        }
+        .shadow(color: .black.opacity(isScrolled ? 0.10 : 0), radius: 10, y: 4)
+        .animation(.easeInOut(duration: 0.30), value: isScrolled)
     }
 }
 

@@ -1,49 +1,129 @@
 import SwiftUI
 
 struct PrivacyPolicyView: View {
-    var body: some View { LegalDocumentView(title: "Privacy Policy", updated: "20th October 2025", sections: privacySections) }
+    var body: some View {
+        LegalDocumentView(kind: .privacy, title: "Privacy Policy", updated: "20th October 2025", sections: privacySections)
+    }
 }
 
 struct TermsOfServiceView: View {
-    var body: some View { LegalDocumentView(title: "Terms of Service", updated: "9th December 2025", sections: termsSections) }
+    var body: some View {
+        LegalDocumentView(kind: .terms, title: "Terms of Service", updated: "9th December 2025", sections: termsSections)
+    }
 }
 
-private struct LegalSection: Identifiable { let id = UUID(); let title: String; let body: String }
+private struct LegalSection: Identifiable {
+    let id = UUID()
+    let title: String
+    let body: String
+}
+
+private enum LegalKind {
+    case privacy
+    case terms
+}
 
 private struct LegalDocumentView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var sizeClass
-    let title: String, updated: String, sections: [LegalSection]
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("appearance") private var appearance = "system"
+
+    let kind: LegalKind
+    let title: String
+    let updated: String
+    let sections: [LegalSection]
 
     var body: some View {
         ZStack(alignment: .top) {
+            LinearGradient(
+                colors: [CATheme.muted(scheme).opacity(0.45), CATheme.background(scheme)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
             ScrollView {
-                VStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 24) {
-                        Text(title).font(.system(size: sizeClass == .compact ? 40 : 52, weight: .bold))
-                        Text("Last Updated: \(updated)").font(.caption).foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 28) {
-                            ForEach(sections) { section in
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text(section.title).font(.title2.bold())
-                                    Text(section.body).textSelection(.enabled).lineSpacing(5)
+                VStack(spacing: 28) {
+                    legalToolbar
+                    VStack(alignment: .leading, spacing: 28) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(title)
+                                .font(.system(size: sizeClass == .compact ? 36 : 48, weight: .bold))
+                            Text("Last Updated: \(updated)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ForEach(sections) { section in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(section.title).font(.title2.bold())
+                                if section.title.hasSuffix("Contact") {
+                                    contactSection
+                                } else {
+                                    Text(attributedBody(section))
+                                        .textSelection(.enabled)
+                                        .lineSpacing(5)
                                 }
                             }
-                            Link("support@enkei64.xyz", destination: URL(string: "mailto:support@enkei64.xyz")!)
                         }
                     }
-                    .frame(maxWidth: 896, alignment: .leading)
-                    .padding(.horizontal, sizeClass == .compact ? 16 : 24)
-                    .padding(.top, sizeClass == .compact ? 112 : 128)
-                    .padding(.bottom, 80)
-                    .frame(maxWidth: .infinity)
-                    CAWebsiteFooter()
+                    .padding(sizeClass == .compact ? 20 : 40)
+                    .frame(maxWidth: 768, alignment: .leading)
+                    .background(CATheme.background(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(CATheme.border(scheme), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.08), radius: 18, y: 8)
                 }
+                .frame(maxWidth: 896)
+                .padding(.horizontal, sizeClass == .compact ? 16 : 24)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity)
             }
-            .background(CATheme.background(scheme).ignoresSafeArea())
-            CAWebsiteNavigation().padding(.horizontal, sizeClass == .compact ? 16 : 24).padding(.top, 8)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var legalToolbar: some View {
+        HStack {
+            Button { dismiss() } label: { Label("Back", systemImage: "arrow.left") }
+                .buttonStyle(CAWebButtonStyle(variant: .ghost))
+            Spacer()
+            Button { appearance = scheme == .dark ? "light" : "dark" } label: {
+                Image(systemName: scheme == .dark ? "sun.max" : "moon")
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(CAWebButtonStyle(variant: .outline, height: 36))
+            .accessibilityLabel("Toggle theme")
+        }
+        .frame(maxWidth: 768)
+    }
+
+    private func attributedBody(_ section: LegalSection) -> AttributedString {
+        var body = section.body
+        if kind == .privacy && section.title == "4. Third Parties" {
+            body = body.replacingOccurrences(
+                of: "Google's Privacy Policy",
+                with: "[Google's Privacy Policy](https://policies.google.com/privacy)"
+            )
+        }
+        return (try? AttributedString(markdown: body)) ?? AttributedString(body)
+    }
+
+    @ViewBuilder
+    private var contactSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Questions? Contact us at").lineSpacing(5)
+            Link("support@enkei64.xyz", destination: URL(string: "mailto:support@enkei64.xyz")!)
+            if kind == .privacy {
+                NavigationLink("Terms of Service") { TermsOfServiceView() }
+            } else {
+                NavigationLink("Privacy Policy") { PrivacyPolicyView() }
+            }
+        }
+        .font(.body)
     }
 }
 
