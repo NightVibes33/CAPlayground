@@ -1,0 +1,27 @@
+name: Run final staging shell patch
+
+on:
+  push:
+    branches: [agent/native-ios-conversion-major-staging]
+    paths: [.github/workflows/staging-run-final-shell-patch.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply staged source patch
+        run: python3 .github/scripts/staging_final_shell_patch.py
+      - name: Commit staged source
+        run: |
+          rm -f .github/scripts/staging_final_shell_patch.py
+          rm -f .github/workflows/staging-final-shell-parity.yml
+          rm -f .github/workflows/staging-run-final-shell-patch.yml
+          git config user.name 'CAPlayground Staging Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Stage final legal and bento parity'
+          git push
