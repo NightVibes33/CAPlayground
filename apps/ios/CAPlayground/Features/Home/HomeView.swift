@@ -404,7 +404,7 @@ struct HomeView: View {
                let last = link.split(separator: ",").first(where: { $0.contains("rel=\"last\"") }),
                let pageRange = last.range(of: "page=") {
                 let tail = last[pageRange.upperBound...]
-                let digits = tail.prefix(where: { $0.isNumber })
+                let digits = tail.prefix(while: { $0.isNumber })
                 commitCount = Int(digits)
             }
         } catch { }
