@@ -1,0 +1,57 @@
+name: Apply native Projects deep-link parity
+on:
+  push:
+    branches: [agent/native-ios-conversion]
+    paths: [.github/workflows/projects-deeplink-parity.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/native-ios-conversion
+          fetch-depth: 0
+      - name: Patch Projects launch intent
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('apps/ios/CAPlayground/Features/Projects/ProjectsView.swift')
+          s = p.read_text()
+
+          old = 'struct ProjectsView: View {\n'
+          new = 'struct ProjectsView: View {\n    let launchIntent: ProjectsLaunchIntent?\n\n    init(launchIntent: ProjectsLaunchIntent? = nil) {\n        self.launchIntent = launchIntent\n    }\n\n'
+          if old not in s:
+              raise SystemExit('ProjectsView declaration anchor missing')
+          s = s.replace(old, new, 1)
+
+          old = '    @State private var pendingSyncIDs: Set<String> = []\n'
+          new = old + '    @State private var appliedLaunchIntentID: UUID?\n'
+          if old not in s:
+              raise SystemExit('pendingSyncIDs anchor missing')
+          s = s.replace(old, new, 1)
+
+          old = '            .task {\n                if drive.connected { await drive.refresh() }\n            }\n'
+          new = '            .task {\n                applyLaunchIntentIfNeeded()\n                if drive.connected { await drive.refresh() }\n            }\n'
+          if old not in s:
+              raise SystemExit('task anchor missing')
+          s = s.replace(old, new, 1)
+
+          anchor = '    private var tosBinding: Binding<Bool> {\n'
+          block = '''    private func applyLaunchIntentIfNeeded() {\n        guard let launchIntent, appliedLaunchIntentID != launchIntent.id else { return }\n        appliedLaunchIntentID = launchIntent.id\n\n        if launchIntent.uploadMode {\n            selectMode = true\n        }\n\n        if let importURL = launchIntent.importURL {\n            importLinkURL = importURL\n            importLinkName = launchIntent.name\n            importLinkCreator = launchIntent.creator\n            importLinkOpen = true\n        }\n    }\n\n'''
+          if anchor not in s:
+              raise SystemExit('tosBinding anchor missing')
+          s = s.replace(anchor, block + anchor, 1)
+          p.write_text(s)
+          PY
+      - name: Commit Projects deep-link parity
+        shell: bash
+        run: |
+          rm .github/workflows/projects-deeplink-parity.yml
+          git config user.name 'CAPlayground Parity Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add apps/ios/CAPlayground/Features/Projects/ProjectsView.swift .github/workflows/projects-deeplink-parity.yml
+          git commit -m 'Handle Projects query intents natively'
+          git push origin HEAD:agent/native-ios-conversion
