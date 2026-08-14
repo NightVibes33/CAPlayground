@@ -2,6 +2,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ProjectsView: View {
+    let launchIntent: ProjectsLaunchIntent?
+
+    init(launchIntent: ProjectsLaunchIntent? = nil) {
+        self.launchIntent = launchIntent
+    }
+
     enum DateFilter: String, CaseIterable { case all = "All time", seven = "Last 7 days", thirty = "Last 30 days", year = "This year" }
     enum LocationFilter: String, CaseIterable { case all = "All locations", device = "Device only", cloud = "Cloud only", both = "Device and Cloud" }
     enum SortOrder: String, CaseIterable { case recent = "Newest first", oldest = "Oldest first", nameAscending = "Name A → Z", nameDescending = "Name Z → A" }
@@ -64,6 +70,7 @@ struct ProjectsView: View {
     @State private var useDeviceBounds = false
     @State private var selectedDeviceName = "iPhone 14"
     @State private var pendingSyncIDs: Set<String> = []
+    @State private var appliedLaunchIntentID: UUID?
 
     private var mergedEntries: [Entry] {
         var output: [Entry] = []
@@ -159,12 +166,29 @@ struct ProjectsView: View {
                 Button("Cancel", role: .cancel) { pendingDelete = nil }
             } message: { Text("This action cannot be undone.") }
             .task {
+                applyLaunchIntentIfNeeded()
                 if drive.connected { await drive.refresh() }
             }
             .onChange(of: drive.connected) { _, connected in
                 guard connected, !pendingSyncIDs.isEmpty else { return }
                 Task { await syncEntries(withIDs: pendingSyncIDs) }
             }
+        }
+    }
+
+    private func applyLaunchIntentIfNeeded() {
+        guard let launchIntent, appliedLaunchIntentID != launchIntent.id else { return }
+        appliedLaunchIntentID = launchIntent.id
+
+        if launchIntent.uploadMode {
+            selectMode = true
+        }
+
+        if let importURL = launchIntent.importURL {
+            importLinkURL = importURL
+            importLinkName = launchIntent.name
+            importLinkCreator = launchIntent.creator
+            importLinkOpen = true
         }
     }
 
