@@ -5,7 +5,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-private struct WallpapersResponse: Codable, Sendable {
+struct WallpapersResponse: Codable, Sendable {
     let baseURL: URL
     let wallpapers: [WallpaperItem]
 
@@ -15,7 +15,7 @@ private struct WallpapersResponse: Codable, Sendable {
     }
 }
 
-private struct WallpaperItem: Codable, Identifiable, Sendable {
+struct WallpaperItem: Codable, Identifiable, Sendable {
     let id: String
     let name: String
     let creator: String
@@ -42,7 +42,7 @@ private struct WallpaperItem: Codable, Identifiable, Sendable {
     }
 }
 
-private struct WallpaperDownloadStat: Codable, Sendable {
+struct WallpaperDownloadStat: Codable, Sendable {
     let id: String
     let downloads: Int
 
@@ -57,7 +57,7 @@ private struct WallpaperDownloadStat: Codable, Sendable {
     }
 }
 
-private struct TendiesExportDocument: FileDocument {
+struct TendiesExportDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.tendies] }
     static var writableContentTypes: [UTType] { [.tendies] }
     let data: Data
@@ -77,6 +77,12 @@ private struct SafariDestination: Identifiable {
 }
 
 struct WallpapersView: View {
+    let launchIntent: WallpapersLaunchIntent?
+
+    init(launchIntent: WallpapersLaunchIntent? = nil) {
+        self.launchIntent = launchIntent
+    }
+
     @Environment(ProjectStore.self) private var store
     @Environment(AuthStore.self) private var auth
     @Environment(\.colorScheme) private var scheme
@@ -106,6 +112,7 @@ struct WallpapersView: View {
     @State private var showingFileExporter = false
     @State private var copiedWallpaperID: String?
     @State private var safariDestination: SafariDestination?
+    @State private var appliedLaunchIntentID: UUID?
 
     private var cacheDirectory: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -135,36 +142,42 @@ struct WallpapersView: View {
     var body: some View {
         ZStack(alignment: .top) {
             ScrollView {
-                VStack(spacing: 32) {
-                    VStack(spacing: 12) {
-                        Text("Wallpaper Gallery")
-                            .font(.system(size: 50, weight: .bold))
-                        Text("Browse wallpapers made by the CAPlayground community.")
-                            .foregroundStyle(.secondary)
-                    }
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 0) {
+                    VStack(spacing: 32) {
+                        VStack(spacing: 12) {
+                            Text("Wallpaper Gallery")
+                                .font(.system(size: 50, weight: .bold))
+                            Text("Browse wallpapers made by the CAPlayground community.")
+                                .foregroundStyle(.secondary)
+                        }
+                        .multilineTextAlignment(.center)
 
-                    controls
+                        controls
 
-                    if isLoading {
-                        ProgressView("Loading...").frame(minHeight: 260)
-                    } else if failed || response == nil {
-                        Text("Unable to load wallpapers right now. Please try again later.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .frame(minHeight: 260)
-                    } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 28)], spacing: 28) {
-                            ForEach(wallpapers) { item in
-                                wallpaperCard(item)
-                                    .onTapGesture { selected = item }
+                        if isLoading {
+                            ProgressView("Loading...").frame(minHeight: 260)
+                        } else if failed || response == nil {
+                            Text("Unable to load wallpapers right now. Please try again later.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(minHeight: 260)
+                        } else {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 280), spacing: 28)], spacing: 28) {
+                                ForEach(wallpapers) { item in
+                                    wallpaperCard(item)
+                                        .onTapGesture { selected = item }
+                                }
                             }
                         }
                     }
+                    .frame(maxWidth: 1120)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 96)
+                    .padding(.bottom, 64)
+                    .frame(maxWidth: .infinity)
+
+                    CAWebsiteFooter()
                 }
-                .frame(maxWidth: 1120)
-                .padding(.horizontal, 24)
-                .padding(.top, 96).padding(.bottom, 64)
                 .frame(maxWidth: .infinity)
             }
             CAWebsiteNavigation().padding(.horizontal, 16).padding(.top, 8)
@@ -197,9 +210,12 @@ struct WallpapersView: View {
         .task {
             await loadWallpapers()
             await loadDownloadStats()
+            applyLaunchIntentIfNeeded()
         }
         .onOpenURL { url in
-            handleGalleryDeepLink(url)
+            if let intent = WallpapersLaunchIntent(url: url) {
+                applyLaunchIntent(intent)
+            }
         }
     }
 
@@ -479,14 +495,23 @@ struct WallpapersView: View {
         value.replacingOccurrences(of: #"[\\/:*?\"<>|]"#, with: "_", options: .regularExpression)
     }
 
-    private func handleGalleryDeepLink(_ url: URL) {
-        guard url.scheme?.lowercased() == "caplayground", url.host == "wallpapers" else { return }
-        let values = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        let id = values.first(where: { $0.name == "id" })?.value
-        let action = values.first(where: { $0.name == "action" })?.value
-        if let q = values.first(where: { $0.name == "q" })?.value { query = q }
-        guard let id, let item = response?.wallpapers.first(where: { $0.id == id }) else { return }
-        if action == "edit", let fileURL = fileURL(item) {
+    private func applyLaunchIntentIfNeeded() {
+        guard let launchIntent, appliedLaunchIntentID != launchIntent.id else { return }
+        applyLaunchIntent(launchIntent)
+    }
+
+    private func applyLaunchIntent(_ intent: WallpapersLaunchIntent) {
+        guard response != nil else { return }
+        appliedLaunchIntentID = intent.id
+
+        if !intent.query.isEmpty {
+            query = intent.query
+        }
+
+        guard let id = intent.wallpaperID,
+              let item = response?.wallpapers.first(where: { $0.id == id }) else { return }
+
+        if intent.action == "edit", let fileURL = fileURL(item) {
             Task { await openInEditor(item, fileURL: fileURL) }
         } else {
             selected = item
@@ -494,7 +519,7 @@ struct WallpapersView: View {
     }
 }
 
-private struct WallpaperVideoPreview: View {
+struct WallpaperVideoPreview: View {
     let url: URL
     @State private var player: AVPlayer
 
